@@ -1,0 +1,15 @@
+{
+  "name": "racket-science",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Tennis roster with Google sign-in and atomic JSON field updates",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "test": "node --test",
+    "reset": "node --env-file=.env reset-game.js",
+    "reminders": "node --env-file=.env send-reminders.js",
+    "scheduler": "node --env-file=.env scheduler.js"
+  }
+}

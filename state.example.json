@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "gameDate": "2026-09-25",
+  "notes": "Team announcements go here.",
+  "players": [
+    {
+      "id": "player-1",
+      "name": "Player 1",
+      "attendance": null,
+      "comments": "",
+      "email": "player1@example.com",
+      "alternateEmail": "",
+      "phone": ""
+    },
+    {
+      "id": "player-2",
+      "name": "Player 2",
+      "attendance": null,
+      "comments": "",
+      "email": "player2@example.com",
+      "alternateEmail": "",
+      "phone": ""
+    },
+    {
+      "id": "player-3",
+      "name": "Player 3",
+      "attendance": null,
+      "comments": "",
+      "email": "player3@example.com",
+      "alternateEmail": "",
+      "phone": ""
+    }
+  ]
+}
