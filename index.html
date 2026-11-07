@@ -200,11 +200,20 @@
   }
 
   .photos {
-    padding: 32px;
-    border: 1px dashed #9ab4a5;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .photos img {
+    height: 230px;
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
     border-radius: 10px;
-    text-align: center;
-    color: #5b7066;
+    display: block;
   }
 
   .contacts { margin: 0 0 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -317,7 +326,9 @@
   </p>
 
   <div class="photos">
-    Team photos — original image files can be added here later.
+    <img src="photos/team-1.jpg" alt="Group photo of the players at the net" loading="lazy">
+    <img src="photos/team-2.jpg" alt="Players chatting on court, one holding a dog" loading="lazy">
+    <img src="photos/team-3.jpg" alt="Group photo of the players on the bleachers" loading="lazy">
   </div>
 </main>
 
