@@ -370,6 +370,8 @@ const WX = c => c===0?['☀️','Clear']:c<=2?['🌤️','Partly cloudy']:c===3?
 async function loadWeather(date) {
   if (!date || (date === weatherFor && Date.now() - weatherAt < 30*60*1000)) return;
   const box = document.getElementById('weather');
+  const today = new Intl.DateTimeFormat('en-CA', {timeZone:'America/Los_Angeles'}).format(new Date());  // YYYY-MM-DD
+  if (date < today) { box.hidden = true; weatherFor = date; weatherAt = Date.now(); return; }  // no "forecast" for a past game
   const q = new URLSearchParams({latitude:WEATHER_LAT, longitude:WEATHER_LON,
     hourly:'temperature_2m,precipitation_probability',
     daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
