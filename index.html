@@ -206,7 +206,7 @@
     color: #5b7066;
   }
 
-  .contacts { margin: 0 0 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .contacts { margin: 0 0 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .contacts[hidden] { display: none; }
   .contacts a {
     display: inline-block; padding: 7px 14px; border-radius: 8px;
@@ -281,11 +281,6 @@
    
   </p>
 
-  <p class="contacts" id="contacts" hidden>
-    <a id="contacts-link" target="_blank" rel="noopener">🔒 Player contact info</a>
-    <span class="hint">Opens a Google Sheet; sign in with the Google account you gave the organizer.</span>
-  </p>
-
   <div class="scroll">
     <table>
       <thead>
@@ -311,6 +306,11 @@
       <textarea id="notes"></textarea>
     </div>
   </section>
+
+  <p class="contacts" id="contacts" hidden>
+    <a id="contacts-link" target="_blank" rel="noopener">🔒 Player contact info</a>
+    <span class="hint">Opens a Google Sheet; sign in with the Google account you gave the organizer.</span>
+  </p>
 
   <div class="photos">
     Team photos — original image files can be added here later.
