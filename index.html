@@ -22,10 +22,11 @@
 
   header {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
+    gap: 6px;
+    text-align: center;
+    margin-bottom: 8px;
   }
 
   h1 {
@@ -49,6 +50,7 @@
   }
 
   .current-date {
+    margin: 0;
     font-size: 20px;
     font-weight: 700;
   }
@@ -222,10 +224,8 @@
 <main>
   <header>
     <h1><img src="racket-left.png" alt=""> <span>Racket Science!</span> <img src="racket-right.png" alt=""></h1>
-    <strong id="header-date"></strong>
+    <p class="current-date" id="current-date"></p>
   </header>
-
-  <p class="current-date" id="current-date"></p>
 
   <p class="hint">
     <span id="save-status" role="status">Loading roster…</span> <a href="./" id="reload" hidden>Reload to review</a>
@@ -260,11 +260,6 @@
       <textarea id="notes"></textarea>
     </div>
   </section>
-
-  <p>
-    Disappointing showing at Wimbledon this year, several of the
-    group not appearing in the round of 16.
-  </p>
 
   <div class="photos">
     Team photos — original image files can be added here later.
@@ -336,7 +331,6 @@ function render() {
   tbody.replaceChildren();
   const label = new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'long',month:'long',day:'numeric'}).format(new Date(state.gameDate+'T12:00:00Z'));
   document.getElementById('current-date').textContent = label;
-  document.getElementById('header-date').textContent = label;
   for (const player of state.players) {
     const row = document.createElement('tr');
     function textField(field,label) {
