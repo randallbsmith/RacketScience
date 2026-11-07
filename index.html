@@ -82,6 +82,9 @@
     text-align: left;
   }
 
+  /* Player and Playing? columns hug their content; Comments takes the remaining width */
+  th:nth-child(-n+2), td:nth-child(-n+2) { width: 1%; white-space: nowrap; }
+
   input, textarea {
     font: inherit;
     color: inherit;
