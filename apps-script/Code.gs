@@ -27,7 +27,7 @@ const COL = {
   alternateEmail: 8,  // H
   phone:          9,  // I  — set to 0 if the sheet has no phone column
 };
-const NOTES_CELL  = "";  // e.g. "B33" for a team-notes cell; "" = no team notes
+const NOTES_CELL  = "B33";  // team notes cell ("" = no team notes); cleared by clearEntriesApp()
 
 // A row counts as an active player when its email column contains "@"
 // (the same rule clearEntries() uses).
