@@ -207,7 +207,7 @@
   }
 
   .weather {
-    max-width: 560px;
+    max-width: 680px;
     margin: 0 auto 14px;
     padding: 10px 14px 6px;
     background: white;
@@ -231,7 +231,10 @@
   .weather-summary .rain { color: #2f6fb0; }
   .weather-summary .game { flex-basis: 100%; text-align: center; font-size: 14px; }
 
-  .weather svg { display: block; width: 100%; height: auto; margin-top: 4px; }
+  .weather-charts { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; }
+  .weather-charts figure { flex: 1 1 240px; margin: 0; }
+  .weather-charts figcaption { font-size: 11px; font-weight: 700; color: #5b7066; text-align: center; }
+  .weather svg { display: block; width: 100%; height: auto; }
   .weather .credit { text-align: right; font-size: 10px; color: #8a9b92; }
   .weather .credit a { color: inherit; }
 
@@ -258,7 +261,10 @@
 
   <section class="weather" id="weather" hidden aria-label="Weather forecast for the game day">
     <div class="weather-summary" id="weather-summary"></div>
-    <svg id="weather-chart" viewBox="0 0 560 150" role="img" aria-label="Hourly temperature and chance of rain"></svg>
+    <div class="weather-charts">
+      <figure><figcaption>Temperature</figcaption><svg id="weather-temp" viewBox="0 0 270 140" role="img" aria-label="Hourly temperature, 8 AM to 2 PM"></svg></figure>
+      <figure><figcaption>Chance of rain</figcaption><svg id="weather-rain" viewBox="0 0 270 140" role="img" aria-label="Hourly chance of rain, 8 AM to 2 PM"></svg></figure>
+    </div>
     <div class="credit">Forecast for Palo Alto (94306) · <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>
   </section>
 
@@ -398,21 +404,41 @@ function drawWeather(w) {
   const gTemp = Math.round(temps[11]), gRain = Math.max(...gHours.map(h => rain[h]));
   add('game', `<b>Game time (10:30–noon):</b> ${gTemp}°, ${gRain}% chance of rain`);
 
-  const W = 560, H = 150, L = 30, R = 8, T = 10, B = 22, ph = H - T - B, pw = W - L - R;
-  const lo = Math.floor(Math.min(...temps) / 5) * 5 - 5, hi = Math.ceil(Math.max(...temps) / 5) * 5 + 5;
-  const x = i => L + pw * i / (temps.length - 1), yT = v => T + ph * (hi - v) / (hi - lo), yR = v => T + ph * (100 - v) / 100;
-  let svg = `<rect x="${x(GAME_START)}" y="${T}" width="${x(GAME_END)-x(GAME_START)}" height="${ph}" fill="#ffd54f" opacity="0.28"/><text x="${(x(GAME_START)+x(GAME_END))/2}" y="${T+ph-4}" font-size="9" text-anchor="middle" fill="#8a6d00">GAME</text>`;
-  for (let v = lo; v <= hi; v += 10) svg += `<line x1="${L}" x2="${W-R}" y1="${yT(v)}" y2="${yT(v)}" stroke="#e8f1eb"/><text x="${L-4}" y="${yT(v)+4}" font-size="10" text-anchor="end" fill="#8a9b92">${v}°</text>`;
-  const bw = pw / temps.length * 0.7;
-  rain.forEach((v, i) => { if (v > 0) svg += `<rect x="${x(i)-bw/2}" y="${yR(v)}" width="${bw}" height="${T+ph-yR(v)}" fill="#7fb3e6" opacity="0.55"><title>${i}:00 — ${v}% rain</title></rect>`; });
-  const pts = temps.map((v, i) => `${x(i)},${yT(v)}`).join(' ');
-  svg += `<polygon points="${L},${T+ph} ${pts} ${W-R},${T+ph}" fill="#279da8" opacity="0.12"/>`;
-  svg += `<polyline points="${pts}" fill="none" stroke="#279da8" stroke-width="2.5" stroke-linejoin="round"/>`;
-  const iHi = temps.indexOf(Math.max(...temps)), iLo = temps.indexOf(Math.min(...temps));
-  for (const [i, lab] of [[iHi,'H'],[iLo,'L']]) svg += `<circle cx="${x(i)}" cy="${yT(temps[i])}" r="3.5" fill="#279da8"/><text x="${x(i)}" y="${yT(temps[i]) - 7}" font-size="10" text-anchor="${i<2?'start':i>21?'end':'middle'}" fill="#243c32">${lab} ${Math.round(temps[i])}°</text>`;
-  for (const [i, lab] of [[0,'12AM'],[6,'6AM'],[12,'12PM'],[18,'6PM']]) svg += `<text x="${x(i)}" y="${H-6}" font-size="10" text-anchor="${i?'middle':'start'}" fill="#5b7066">${lab}</text>`;
-  svg += `<text x="${W-R}" y="${H-6}" font-size="10" text-anchor="end" fill="#7fb3e6">bars = % rain</text>`;
-  document.getElementById('weather-chart').innerHTML = svg;
+  const H0 = 8, H1 = 14;                         // chart window: 8 AM – 2 PM
+  const hrs = []; for (let h = H0; h <= H1; h++) hrs.push(h);
+  const W = 270, Hh = 140, L = 30, R = 10, T = 14, B = 22, ph = Hh - T - B, pw = W - L - R;
+  const x = h => L + pw * (h - H0) / (H1 - H0);
+  const lab = h => h === 12 ? '12PM' : h < 12 ? h + 'AM' : (h - 12) + 'PM';
+  const frame = (yLines) => {
+    let g = `<rect x="${x(GAME_START)}" y="${T}" width="${x(GAME_END)-x(GAME_START)}" height="${ph}" fill="#ffd54f" opacity="0.28"/>`
+          + `<text x="${(x(GAME_START)+x(GAME_END))/2}" y="${T-3}" font-size="9" text-anchor="middle" fill="#8a6d00">GAME</text>`;
+    for (const [y, t] of yLines) g += `<line x1="${L}" x2="${W-R}" y1="${y}" y2="${y}" stroke="#e8f1eb"/><text x="${L-4}" y="${y+3}" font-size="9" text-anchor="end" fill="#8a9b92">${t}</text>`;
+    for (const h of hrs) g += `<line x1="${x(h)}" x2="${x(h)}" y1="${T+ph}" y2="${T+ph+4}" stroke="#9ab4a5"/><text x="${x(h)}" y="${Hh-6}" font-size="9" text-anchor="middle" fill="#5b7066">${lab(h)}</text>`;
+    return g + `<line x1="${L}" x2="${W-R}" y1="${T+ph}" y2="${T+ph}" stroke="#9ab4a5"/>`;
+  };
+
+  // Temperature
+  const tv = hrs.map(h => temps[h]);
+  const lo = Math.floor(Math.min(...tv) / 5) * 5 - 5, hi = Math.ceil(Math.max(...tv) / 5) * 5 + 5;
+  const yT = v => T + ph * (hi - v) / (hi - lo);
+  const tLines = []; for (let v = lo; v <= hi; v += 5) tLines.push([yT(v), v + '°']);
+  let ts = frame(tLines);
+  const pts = hrs.map(h => `${x(h)},${yT(temps[h])}`).join(' ');
+  ts += `<polygon points="${x(H0)},${T+ph} ${pts} ${x(H1)},${T+ph}" fill="#279da8" opacity="0.12"/>`
+      + `<polyline points="${pts}" fill="none" stroke="#279da8" stroke-width="2.5" stroke-linejoin="round"/>`;
+  for (const h of hrs) ts += `<circle cx="${x(h)}" cy="${yT(temps[h])}" r="3" fill="#279da8"/><text x="${x(h)}" y="${yT(temps[h])-6}" font-size="9" text-anchor="middle" fill="#243c32">${Math.round(temps[h])}°</text>`;
+  document.getElementById('weather-temp').innerHTML = ts;
+
+  // Chance of rain
+  const yR = v => T + ph * (100 - v) / 100;
+  let rs = frame([[yR(0),'0%'],[yR(50),'50%'],[yR(100),'100%']]);
+  const bw = pw / (H1 - H0) * 0.55;
+  for (const h of hrs) {
+    const v = rain[h];
+    if (v > 0) rs += `<rect x="${x(h)-bw/2}" y="${yR(v)}" width="${bw}" height="${T+ph-yR(v)}" fill="#4a90d9" opacity="0.7"/>`;
+    rs += `<text x="${x(h)}" y="${(v > 0 ? yR(v) : T+ph) - 4}" font-size="9" text-anchor="middle" fill="#2f6fb0">${v}%</text>`;
+  }
+  document.getElementById('weather-rain').innerHTML = rs;
 }
 
 function render() {
