@@ -1,5 +1,10 @@
 # RacketScience
 
+## Live page (GitHub Pages + Google Sheet)
+
+`index.html` is the published page at https://randallbsmith.github.io/RacketScience/. It reads and writes the Google Sheet through the Apps Script web app in `apps-script/Code.gs` (deployed with *Execute as: Me*, *Who has access: Anyone*). The sheet remains the data store, and its existing reminder/reset scripts keep running. The Node server described below is an alternative that is not in use.
+
+
 A small tennis roster: one HTML page, a Node.js server, and one JSON state file. No database and no external JavaScript dependencies.
 
 ## Status

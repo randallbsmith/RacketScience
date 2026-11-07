@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Racket Science!</title>
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: #f4f7f5;
+    color: #243c32;
+    font: 14px system-ui, sans-serif;
+  }
+
+  main {
+    max-width: 1600px;
+    margin: auto;
+    padding: 24px;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  h1 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    color: #279da8;
+    font-style: italic;
+  }
+
+  h1 img {
+    width: auto;
+    height: 38px;
+    object-fit: contain;
+  }
+
+  .hint {
+    color: #5b7066;
+    font-size: 12px;
+  }
+
+  .current-date {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .scroll {
+    overflow-x: auto;
+    background: white;
+    border: 1px solid #cbd9d0;
+    border-radius: 10px;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  th {
+    padding: 8px;
+    text-align: left;
+    background: #e8f1eb;
+    font-size: 12px;
+  }
+
+  td {
+    padding: 0;
+    text-align: left;
+  }
+
+  input, textarea {
+    font: inherit;
+    color: inherit;
+    padding: 8px;
+    border: 1px solid #c3d1c8;
+    background: white;
+    width: 100%;
+  }
+
+  td > input {
+    display: block;
+    min-width: 180px;
+    height: 38px;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  input:focus-visible, textarea:focus-visible {
+    outline: 3px solid #279da8;
+    outline-offset: -3px;
+  }
+
+  fieldset {
+    display: flex;
+    gap: 0;
+    border: 0;
+    margin: 0;
+    padding: 0;
+    height: 38px;
+    white-space: nowrap;
+  }
+
+  fieldset label {
+    border-top: 1px solid #c3d1c8;
+    border-bottom: 1px solid #c3d1c8;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 8px;
+  }
+
+  .yes { background: #e2f5e9; }
+  .no { background: #ffeded; }
+  .maybe { background: #fff7d9; }
+
+  input[type=radio] {
+    min-width: 0;
+    width: 17px;
+    height: 17px;
+    margin: 0;
+    accent-color: #218b96;
+  }
+
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .bottom {
+    display: grid;
+    grid-template-columns: var(--player-width, 180px) var(--attendance-width, 220px) minmax(240px, 1fr);
+    gap: 0;
+    margin: 0 0 24px;
+  }
+
+  .count {
+    grid-column: 2;
+    padding: 20px 12px;
+    text-align: center;
+    background: #41bac4;
+    border-radius: 10px;
+  }
+
+  .count strong {
+    display: block;
+    font-size: 42px;
+  }
+
+  .count small {
+    display: block;
+    margin-top: 8px;
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  .count small[hidden] {
+    display: none;
+  }
+
+  .count small b {
+    display: block;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .notes {
+    grid-column: 3;
+    margin-left: 20px;
+    background: #fff3f3;
+    border: 1px solid #e3bbbb;
+    padding: 20px;
+    border-radius: 10px;
+  }
+
+  .notes label {
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  textarea {
+    min-height: 130px;
+    resize: vertical;
+    border-radius: 5px;
+  }
+
+  .photos {
+    padding: 32px;
+    border: 1px dashed #9ab4a5;
+    border-radius: 10px;
+    text-align: center;
+    color: #5b7066;
+  }
+
+  @media (max-width: 600px) {
+    main { padding: 14px; }
+    h1 { font-size: 25px; }
+    h1 { gap: 6px; }
+    h1 img { height: 26px; }
+    .bottom .notes { grid-column: 1 / -1; margin: 0; }
+
+    .count strong {
+      display: inline;
+      margin-left: 16px;
+    }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1><img src="racket-left.png" alt=""> <span>Racket Science!</span> <img src="racket-right.png" alt=""></h1>
+    <strong id="header-date"></strong>
+  </header>
+
+  <p class="current-date" id="current-date"></p>
+
+  <p class="hint">
+    <span id="save-status" role="status">Loading roster…</span> <a href="./" id="reload" hidden>Reload to review</a>
+    Scroll sideways to see all contact fields.
+  </p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Player</th>
+          <th scope="col">Playing?</th>
+          <th scope="col">Comments</th>
+          <th scope="col">Email</th>
+          <th scope="col">Alternate email(s)</th>
+          <th scope="col">Phone (optional)</th>
+        </tr>
+      </thead>
+      <tbody id="players"></tbody>
+    </table>
+  </div>
+
+  <section class="bottom">
+    <div class="count" aria-live="polite" aria-atomic="true">
+      Playing
+      <strong id="count">0</strong>
+      <small id="possible-count" hidden>Possibly as many as <b id="possible-total"></b></small>
+    </div>
+
+    <div class="notes" id="notes-box">
+      <label for="notes"><b>Team notes</b></label>
+      <textarea id="notes"></textarea>
+    </div>
+  </section>
+
+  <p>
+    Disappointing showing at Wimbledon this year, several of the
+    group not appearing in the round of 16.
+  </p>
+
+  <div class="photos">
+    Team photos — original image files can be added here later.
+  </div>
+</main>
+
+<script>
+"use strict";
+// Google Apps Script web app that reads/writes the Google Sheet (see apps-script/Code.gs)
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyr6TbwhyFmxZU9zAuSnMrDe96HLRzEX6P893l2lY96X1X8SDB8Wyg8X5opUID8k3Pn/exec';
+let state, stopped = false;
+async function callScript(params) {
+  const response = await fetch(SCRIPT_URL + '?' + new URLSearchParams(params), {cache:'no-store'});
+  const text = await response.text();
+  try { return JSON.parse(text); }
+  catch { throw Error('not-json'); }  // e.g. a Google sign-in page instead of data
+}
+const edits = new Map();
+const status = document.getElementById('save-status');
+const tbody = document.getElementById('players');
+function stop(message) {
+  stopped = true;
+  status.textContent = message + ' Your unsaved text remains visible; copy it before reloading.';
+  document.getElementById('reload').hidden = false;
+}
+function updateCount() {
+  const yes = state.players.filter(p=>p.attendance==='yes').length;
+  const maybe = state.players.filter(p=>p.attendance==='maybe').length;
+  document.getElementById('count').textContent = yes;
+  document.getElementById('possible-count').hidden = !maybe;
+  document.getElementById('possible-total').textContent = yes + maybe;
+}
+function track(target, field, immediate = false) {
+  const key = `${target.id || 'team'}:${field}`;
+  let edit = edits.get(key);
+  if (!edit) {
+    edit = { target, field, previous: target[field], desired: target[field], gameDate: state.gameDate };
+    edits.set(key, edit);
+  }
+  return value => {
+    if (stopped) return;
+    edit.desired = value;
+    target[field] = value;
+    clearTimeout(edit.timer);
+    status.textContent = 'Unsaved changes…';
+    if (immediate) save(edit);
+    else edit.timer = setTimeout(()=>save(edit), 700);
+  };
+}
+function dirty() { return [...edits.values()].some(e=>e.saving || e.desired!==e.previous); }
+async function save(edit) {
+  if (stopped || edit.saving || edit.desired === edit.previous) return;
+  edit.saving = true;
+  status.textContent = 'Saving…';
+  const value = edit.desired;
+  try {
+    const body = await callScript({action:'update',gameDate:edit.gameDate,playerId:edit.target.id||'',field:edit.field,previous:edit.previous??'',value:value??''});
+    if (!body.ok) { stop(body.message || 'Could not save.'); return; }
+    edit.previous = value;
+  } catch { stop('Connection lost. The last save could not be confirmed.'); }
+  finally {
+    edit.saving = false;
+    if (!stopped && edit.desired !== edit.previous) save(edit);
+    else if (!stopped && !dirty()) status.textContent = 'All changes saved.';
+  }
+}
+function render() {
+  edits.clear();
+  tbody.replaceChildren();
+  const label = new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'long',month:'long',day:'numeric'}).format(new Date(state.gameDate+'T12:00:00Z'));
+  document.getElementById('current-date').textContent = label;
+  document.getElementById('header-date').textContent = label;
+  for (const player of state.players) {
+    const row = document.createElement('tr');
+    function textField(field,label) {
+      const cell = document.createElement('td'), input = document.createElement('input');
+      input.type='text'; input.value=player[field];
+      input.setAttribute('aria-label',`${label} for ${player.name}`);
+      if(field==='comments') input.style.minWidth='520px';
+      if(['email','alternateEmail'].includes(field)) input.style.minWidth='240px';
+      if(field==='email') input.inputMode='email';
+      if(field==='phone') input.inputMode='tel';
+      const changed = track(player,field);
+      input.addEventListener('input',()=>changed(input.value));
+      input.addEventListener('blur',()=>save(edits.get(`${player.id}:${field}`)));
+      cell.append(input); row.append(cell);
+    }
+    textField('name','Player name');
+    const cell=document.createElement('td'), group=document.createElement('fieldset'), legend=document.createElement('legend');
+    legend.className='sr'; legend.textContent=`Attendance for ${player.name}`; group.append(legend);
+    const changed=track(player,'attendance',true);
+    for(const choice of ['Yes','No','Maybe']) {
+      const label=document.createElement('label'), radio=document.createElement('input');
+      label.className=choice.toLowerCase(); radio.type='radio'; radio.name=player.id+'-attendance'; radio.value=choice.toLowerCase();
+      radio.checked=player.attendance===radio.value;
+      radio.addEventListener('change',()=>{changed(radio.value);updateCount();});
+      label.append(radio,document.createTextNode(choice));group.append(label);
+    }
+    cell.append(group);row.append(cell);
+    textField('comments','Comments');textField('email','Email');textField('alternateEmail','Alternate emails');textField('phone','Phone');
+    tbody.append(row);
+  }
+  const notes=document.getElementById('notes');
+  document.getElementById('notes-box').hidden = state.notes === null;
+  notes.value=state.notes ?? '';
+  const changeNotes=track(state,'notes');
+  notes.oninput=()=>changeNotes(notes.value);
+  notes.onblur=()=>save(edits.get('team:notes'));
+  updateCount();alignCount();
+}
+function alignCount() {
+  if(!tbody.rows.length)return;
+  const box=tbody.rows[0].cells[1].getBoundingClientRect(), bottom=document.querySelector('.bottom');
+  bottom.style.setProperty('--player-width',`${Math.max(0,box.left-bottom.getBoundingClientRect().left)}px`);
+  bottom.style.setProperty('--attendance-width',`${box.width}px`);
+}
+async function load(initial=false) {
+  if(stopped || dirty() || (!initial && ['INPUT','TEXTAREA'].includes(document.activeElement.tagName)))return;
+  try {
+    const incoming=await callScript({action:'read'});
+    if(!incoming.ok)throw Error(incoming.message||'load');
+    // Recheck after awaiting the network: typing may have started in the meantime.
+    if(dirty() || (!initial && ['INPUT','TEXTAREA'].includes(document.activeElement.tagName)))return;
+    state=incoming;render();status.textContent='All changes saved.';
+  } catch {status.textContent='Unable to load updates. Check your connection.';}
+}
+new ResizeObserver(alignCount).observe(document.querySelector('table'));
+document.querySelector('.scroll').addEventListener('scroll',alignCount);
+window.addEventListener('resize',alignCount);
+window.addEventListener('beforeunload',event=>{if(dirty()){event.preventDefault();event.returnValue='';}});
+load(true);
+setInterval(()=>load(),15000);
+
+</script>
+</body>
+</html>
