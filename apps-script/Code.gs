@@ -70,9 +70,8 @@ function readState() {
       attendance: r[COL.yes - 1] === true ? "yes" : r[COL.no - 1] === true ? "no"
                 : r[COL.maybe - 1] === true ? "maybe" : null,
       comments: String(r[COL.comments - 1] || ""),
-      email: email,
-      alternateEmail: COL.alternateEmail ? String(r[COL.alternateEmail - 1] || "") : "",
-      phone: COL.phone ? String(r[COL.phone - 1] || "") : "",
+      // Emails and phones are deliberately NOT returned: this web app is public.
+      // They live in the sign-in-protected contacts sheet instead.
     });
   });
   return {
@@ -83,7 +82,7 @@ function readState() {
   };
 }
 
-const TEXT_FIELDS = ["name", "comments", "email", "alternateEmail", "phone"];
+const TEXT_FIELDS = ["name", "comments"];  // the only text fields the public page may change
 
 function updateField(p) {
   const lock = LockService.getScriptLock();
