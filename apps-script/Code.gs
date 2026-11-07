@@ -13,7 +13,7 @@
 // ============================================================
 
 // ---- Sheet layout (1 = column A) — check these against your sheet ----
-const SHEET_NAME  = "MainSheet";
+const SHEET_NAME  = "RacketScienceAppData";
 const DATE_CELL   = "C1";
 const FIRST_ROW   = 3;
 const LAST_ROW    = 31;
