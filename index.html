@@ -206,6 +206,35 @@
     color: #5b7066;
   }
 
+  .weather {
+    max-width: 560px;
+    margin: 0 auto 14px;
+    padding: 10px 14px 6px;
+    background: white;
+    border: 1px solid #cbd9d0;
+    border-radius: 10px;
+  }
+
+  .weather[hidden] { display: none; }
+
+  .weather-summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 15px;
+    flex-wrap: wrap;
+  }
+
+  .weather-summary .icon { font-size: 24px; }
+  .weather-summary .temps b { font-size: 17px; }
+  .weather-summary .rain { color: #2f6fb0; }
+  .weather-summary .game { flex-basis: 100%; text-align: center; font-size: 14px; }
+
+  .weather svg { display: block; width: 100%; height: auto; margin-top: 4px; }
+  .weather .credit { text-align: right; font-size: 10px; color: #8a9b92; }
+  .weather .credit a { color: inherit; }
+
   @media (max-width: 600px) {
     main { padding: 14px; }
     h1 { font-size: 25px; }
@@ -226,6 +255,12 @@
     <h1><img src="racket-left.png" alt=""> <span>Racket Science!</span> <img src="racket-right.png" alt=""></h1>
     <p class="current-date" id="current-date"></p>
   </header>
+
+  <section class="weather" id="weather" hidden aria-label="Weather forecast for the game day">
+    <div class="weather-summary" id="weather-summary"></div>
+    <svg id="weather-chart" viewBox="0 0 560 150" role="img" aria-label="Hourly temperature and chance of rain"></svg>
+    <div class="credit">Forecast for Palo Alto (94306) · <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>
+  </section>
 
   <p class="hint">
     <span id="save-status" role="status">Loading roster…</span> <a href="./" id="reload" hidden>Reload to review</a>
@@ -326,6 +361,58 @@ async function save(edit) {
     else if (!stopped && !dirty()) status.textContent = 'All changes saved.';
   }
 }
+// ── Weather forecast for the game date (Open-Meteo, no key needed) ──
+const WEATHER_LAT = 37.42, WEATHER_LON = -122.13;   // ZIP 94306, Palo Alto
+const GAME_START = 10.5, GAME_END = 12;             // game time, hours (10:30am–noon)
+let weatherFor = null, weatherAt = 0;
+const WX = c => c===0?['☀️','Clear']:c<=2?['🌤️','Partly cloudy']:c===3?['☁️','Cloudy']:c<=48?['🌫️','Fog']
+  :c<=57?['🌦️','Drizzle']:c<=67?['🌧️','Rain']:c<=77?['🌨️','Snow']:c<=82?['🌦️','Showers']:c<=86?['🌨️','Snow showers']:['⛈️','Thunderstorms'];
+async function loadWeather(date) {
+  if (!date || (date === weatherFor && Date.now() - weatherAt < 30*60*1000)) return;
+  const box = document.getElementById('weather');
+  const q = new URLSearchParams({latitude:WEATHER_LAT, longitude:WEATHER_LON,
+    hourly:'temperature_2m,precipitation_probability',
+    daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+    temperature_unit:'fahrenheit', timezone:'America/Los_Angeles', start_date:date, end_date:date});
+  try {
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?' + q);
+    if (!r.ok) throw Error('weather ' + r.status);   // e.g. date too far out or in the past
+    const w = await r.json();
+    weatherFor = date; weatherAt = Date.now();
+    drawWeather(w); box.hidden = false;
+  } catch { box.hidden = true; }
+}
+function drawWeather(w) {
+  const d = w.daily, temps = w.hourly.temperature_2m, rain = w.hourly.precipitation_probability.map(v => v ?? 0);
+  const [icon, words] = WX(d.weather_code[0]);
+  const sum = document.getElementById('weather-summary');
+  sum.replaceChildren();
+  const add = (cls, html) => { const s = document.createElement('span'); s.className = cls; s.innerHTML = html; sum.append(s); };
+  add('icon', icon);
+  add('words', words);
+  add('temps', `<b>${Math.round(d.temperature_2m_max[0])}°</b> / ${Math.round(d.temperature_2m_min[0])}°`);
+  add('rain', `💧 ${d.precipitation_probability_max[0] ?? 0}% chance of rain`);
+  const gHours = [10, 11, 12];
+  const gTemp = Math.round(temps[11]), gRain = Math.max(...gHours.map(h => rain[h]));
+  add('game', `<b>Game time (10:30–noon):</b> ${gTemp}°, ${gRain}% chance of rain`);
+
+  const W = 560, H = 150, L = 30, R = 8, T = 10, B = 22, ph = H - T - B, pw = W - L - R;
+  const lo = Math.floor(Math.min(...temps) / 5) * 5 - 5, hi = Math.ceil(Math.max(...temps) / 5) * 5 + 5;
+  const x = i => L + pw * i / (temps.length - 1), yT = v => T + ph * (hi - v) / (hi - lo), yR = v => T + ph * (100 - v) / 100;
+  let svg = `<rect x="${x(GAME_START)}" y="${T}" width="${x(GAME_END)-x(GAME_START)}" height="${ph}" fill="#ffd54f" opacity="0.28"/><text x="${(x(GAME_START)+x(GAME_END))/2}" y="${T+ph-4}" font-size="9" text-anchor="middle" fill="#8a6d00">GAME</text>`;
+  for (let v = lo; v <= hi; v += 10) svg += `<line x1="${L}" x2="${W-R}" y1="${yT(v)}" y2="${yT(v)}" stroke="#e8f1eb"/><text x="${L-4}" y="${yT(v)+4}" font-size="10" text-anchor="end" fill="#8a9b92">${v}°</text>`;
+  const bw = pw / temps.length * 0.7;
+  rain.forEach((v, i) => { if (v > 0) svg += `<rect x="${x(i)-bw/2}" y="${yR(v)}" width="${bw}" height="${T+ph-yR(v)}" fill="#7fb3e6" opacity="0.55"><title>${i}:00 — ${v}% rain</title></rect>`; });
+  const pts = temps.map((v, i) => `${x(i)},${yT(v)}`).join(' ');
+  svg += `<polygon points="${L},${T+ph} ${pts} ${W-R},${T+ph}" fill="#279da8" opacity="0.12"/>`;
+  svg += `<polyline points="${pts}" fill="none" stroke="#279da8" stroke-width="2.5" stroke-linejoin="round"/>`;
+  const iHi = temps.indexOf(Math.max(...temps)), iLo = temps.indexOf(Math.min(...temps));
+  for (const [i, lab] of [[iHi,'H'],[iLo,'L']]) svg += `<circle cx="${x(i)}" cy="${yT(temps[i])}" r="3.5" fill="#279da8"/><text x="${x(i)}" y="${yT(temps[i]) - 7}" font-size="10" text-anchor="${i<2?'start':i>21?'end':'middle'}" fill="#243c32">${lab} ${Math.round(temps[i])}°</text>`;
+  for (const [i, lab] of [[0,'12AM'],[6,'6AM'],[12,'12PM'],[18,'6PM']]) svg += `<text x="${x(i)}" y="${H-6}" font-size="10" text-anchor="${i?'middle':'start'}" fill="#5b7066">${lab}</text>`;
+  svg += `<text x="${W-R}" y="${H-6}" font-size="10" text-anchor="end" fill="#7fb3e6">bars = % rain</text>`;
+  document.getElementById('weather-chart').innerHTML = svg;
+}
+
 function render() {
   edits.clear();
   tbody.replaceChildren();
@@ -367,7 +454,7 @@ function render() {
   const changeNotes=track(state,'notes');
   notes.oninput=()=>changeNotes(notes.value);
   notes.onblur=()=>save(edits.get('team:notes'));
-  updateCount();alignCount();
+  updateCount();alignCount();loadWeather(state.gameDate);
 }
 function alignCount() {
   if(!tbody.rows.length)return;
