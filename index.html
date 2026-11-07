@@ -206,6 +206,14 @@
     color: #5b7066;
   }
 
+  .contacts { margin: 0 0 10px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .contacts[hidden] { display: none; }
+  .contacts a {
+    display: inline-block; padding: 7px 14px; border-radius: 8px;
+    background: #279da8; color: white; font-weight: 700; text-decoration: none;
+  }
+  .contacts a:hover { background: #218b96; }
+
   .weather {
     max-width: 680px;
     margin: 0 auto 14px;
@@ -270,7 +278,12 @@
 
   <p class="hint">
     <span id="save-status" role="status">Loading roster…</span> <a href="./" id="reload" hidden>Reload to review</a>
-    Scroll sideways to see all contact fields.
+   
+  </p>
+
+  <p class="contacts" id="contacts" hidden>
+    <a id="contacts-link" target="_blank" rel="noopener">🔒 Player contact info</a>
+    <span class="hint">Opens a Google Sheet; sign in with the Google account you gave the organizer.</span>
   </p>
 
   <div class="scroll">
@@ -280,9 +293,6 @@
           <th scope="col">Player</th>
           <th scope="col">Playing?</th>
           <th scope="col">Comments</th>
-          <th scope="col">Email</th>
-          <th scope="col">Alternate email(s)</th>
-          <th scope="col">Phone (optional)</th>
         </tr>
       </thead>
       <tbody id="players"></tbody>
@@ -311,6 +321,9 @@
 "use strict";
 // Google Apps Script web app that reads/writes the Google Sheet (see apps-script/Code.gs)
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyr6TbwhyFmxZU9zAuSnMrDe96HLRzEX6P893l2lY96X1X8SDB8Wyg8X5opUID8k3Pn/exec';
+// View-only Google Sheet with names, emails and phones (requires Google sign-in). "" hides the button.
+const CONTACTS_URL = '';
+if (CONTACTS_URL) { document.getElementById('contacts-link').href = CONTACTS_URL; document.getElementById('contacts').hidden = false; }
 let state, stopped = false;
 async function callScript(params) {
   const response = await fetch(SCRIPT_URL + '?' + new URLSearchParams(params), {cache:'no-store'});
@@ -473,7 +486,7 @@ function render() {
       label.append(radio,document.createTextNode(choice));group.append(label);
     }
     cell.append(group);row.append(cell);
-    textField('comments','Comments');textField('email','Email');textField('alternateEmail','Alternate emails');textField('phone','Phone');
+    textField('comments','Comments');
     tbody.append(row);
   }
   const notes=document.getElementById('notes');
