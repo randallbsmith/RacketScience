@@ -322,7 +322,7 @@
 // Google Apps Script web app that reads/writes the Google Sheet (see apps-script/Code.gs)
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyr6TbwhyFmxZU9zAuSnMrDe96HLRzEX6P893l2lY96X1X8SDB8Wyg8X5opUID8k3Pn/exec';
 // View-only Google Sheet with names, emails and phones (requires Google sign-in). "" hides the button.
-const CONTACTS_URL = '';
+const CONTACTS_URL = 'https://docs.google.com/spreadsheets/d/1FTM56r6_Ob4R0CPYu6nriw_PxoBFyN6vxbTrPZZoHyQ/edit';
 if (CONTACTS_URL) { document.getElementById('contacts-link').href = CONTACTS_URL; document.getElementById('contacts').hidden = false; }
 let state, stopped = false;
 async function callScript(params) {
