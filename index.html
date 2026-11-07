@@ -491,12 +491,14 @@ function render() {
     }
     textField('name','Player name');
     const cell=document.createElement('td'), group=document.createElement('fieldset'), legend=document.createElement('legend');
-    legend.className='sr'; legend.textContent=`Attendance for ${player.name}`; group.append(legend);
+    legend.className='sr'; legend.textContent=`Attendance for ${player.name}`; group.append(legend); group.title='Click a selected choice again to clear it';
     const changed=track(player,'attendance',true);
     for(const choice of ['Yes','No','Maybe']) {
       const label=document.createElement('label'), radio=document.createElement('input');
       label.className=choice.toLowerCase(); radio.type='radio'; radio.name=player.id+'-attendance'; radio.value=choice.toLowerCase();
       radio.checked=player.attendance===radio.value;
+      // Clicking the already-selected choice clears it (no 'change' event fires in that case).
+      radio.addEventListener('click',()=>{ if(player.attendance===radio.value){ radio.checked=false; changed(null); updateCount(); } });
       radio.addEventListener('change',()=>{changed(radio.value);updateCount();});
       label.append(radio,document.createTextNode(choice));group.append(label);
     }
