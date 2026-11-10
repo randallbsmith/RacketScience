@@ -229,6 +229,18 @@
   }
   .contacts a:hover { background: #218b96; }
 
+  /* Placeholder roster shown while the first load is in flight */
+  tbody.loading { pointer-events: none; animation: rs-pulse 1.4s ease-in-out infinite; }
+  tbody.loading input, tbody.loading label { opacity: 0.55; }
+  @keyframes rs-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+  .skel { display: inline-block; height: 12px; border-radius: 6px; background: #dfe9e3; vertical-align: middle; }
+  #save-status.loading::before {
+    content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px;
+    border: 2px solid #9ab4a5; border-top-color: transparent; border-radius: 50%; animation: rs-spin 0.8s linear infinite;
+  }
+  @keyframes rs-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { tbody.loading, #save-status.loading::before { animation: none; } }
+
   .weather {
     max-width: 680px;
     margin: 0 auto 14px;
@@ -532,13 +544,49 @@ async function load(initial=false) {
     if(!incoming.ok)throw Error(incoming.message||'load');
     // Recheck after awaiting the network: typing may have started in the meantime.
     if(dirty() || (!initial && ['INPUT','TEXTAREA'].includes(document.activeElement.tagName)))return;
-    state=incoming;render();status.textContent='All changes saved.';
-  } catch {status.textContent='Unable to load updates. Check your connection.';}
+    state=incoming;tbody.classList.remove('loading');tbody.removeAttribute('aria-busy');status.classList.remove('loading');
+    render();cacheRoster();status.textContent='All changes saved.';
+  } catch {status.classList.remove('loading');status.textContent=tbody.classList.contains('loading')?'Still waiting for the roster… retrying.':'Unable to load updates. Check your connection.';}
 }
+// ── Instant first paint: show the last-known roster (names only) until live data arrives ──
+const ROSTER_KEY = 'racketScience.roster';
+function cacheRoster() {
+  try { localStorage.setItem(ROSTER_KEY, JSON.stringify({gameDate: state.gameDate, names: state.players.map(p => p.name)})); } catch {}
+}
+function renderPlaceholder() {
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(ROSTER_KEY) || 'null'); } catch {}
+  const today = new Intl.DateTimeFormat('en-CA', {timeZone:'America/Los_Angeles'}).format(new Date());
+  if (cached && cached.gameDate >= today)
+    document.getElementById('current-date').textContent = new Intl.DateTimeFormat('en-US',{timeZone:'UTC',weekday:'long',month:'long',day:'numeric'}).format(new Date(cached.gameDate+'T12:00:00Z'));
+  const names = cached && Array.isArray(cached.names) && cached.names.length ? cached.names : Array(10).fill(null);
+  tbody.replaceChildren(); tbody.classList.add('loading'); tbody.setAttribute('aria-busy', 'true');
+  for (const name of names) {
+    const row = document.createElement('tr');
+    const nameCell = document.createElement('td');
+    if (name) { const i = document.createElement('input'); i.type = 'text'; i.value = name; i.disabled = true; nameCell.append(i); }
+    else { const k = document.createElement('span'); k.className = 'skel'; k.style.width = (90 + Math.random()*60|0) + 'px'; k.style.margin = '12px 10px'; nameCell.append(k); }
+    const att = document.createElement('td'), group = document.createElement('fieldset');
+    for (const choice of ['Yes','No','Maybe']) {
+      const label = document.createElement('label'), radio = document.createElement('input');
+      label.className = choice.toLowerCase(); radio.type = 'radio'; radio.disabled = true;
+      label.append(radio, document.createTextNode(choice)); group.append(label);
+    }
+    att.append(group);
+    const com = document.createElement('td'), ci = document.createElement('input');
+    ci.type = 'text'; ci.disabled = true; ci.style.minWidth = '520px'; com.append(ci);
+    row.append(nameCell, att, com); tbody.append(row);
+  }
+  document.getElementById('count').textContent = '–';
+  status.textContent = 'Loading latest…'; status.classList.add('loading');
+  alignCount();
+}
+
 new ResizeObserver(alignCount).observe(document.querySelector('table'));
 document.querySelector('.scroll').addEventListener('scroll',alignCount);
 window.addEventListener('resize',alignCount);
 window.addEventListener('beforeunload',event=>{if(dirty()){event.preventDefault();event.returnValue='';}});
+renderPlaceholder();
 load(true);
 setInterval(()=>load(),15000);
 
