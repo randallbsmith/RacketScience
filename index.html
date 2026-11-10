@@ -130,13 +130,23 @@
   .no { background: #ffeded; }
   .maybe { background: #fff7d9; }
 
+  /* Yes / No / Maybe: glossy plastic domes in a chrome bead (no outer shadow) */
   input[type=radio] {
-    min-width: 0;
-    width: 17px;
-    height: 17px;
-    margin: 0;
-    accent-color: #218b96;
+    --lite: #ffffff; --mid: #e9eef0; --dark: #b9c3c8;      /* unselected: frosted white plastic */
+    appearance: none; -webkit-appearance: none;
+    min-width: 0; width: 20px; height: 20px; margin: 0; flex: none;
+    border-radius: 50%; border: 2.5px solid transparent; cursor: pointer;
+    background:
+      radial-gradient(circle at 50% 28%, rgba(255,255,255,.95) 0 16%, rgba(255,255,255,0) 46%) padding-box,
+      radial-gradient(circle at 50% 75%, var(--lite) 0%, var(--mid) 55%, var(--dark) 100%) padding-box,
+      linear-gradient(180deg,#fdfdfd 0%,#c9ced3 18%,#7d858c 45%,#eef1f3 52%,#a3aab0 70%,#e8ebed 88%,#8c939a 100%) border-box;
+    box-shadow: inset 0 -2px 3px rgba(0,0,0,.18);
   }
+  .yes   input[type=radio]:checked { --lite: #9ef0b4; --mid: #2fbf5c; --dark: #137a35; }
+  .no    input[type=radio]:checked { --lite: #ffb0a8; --mid: #e5483b; --dark: #9c1d14; }
+  .maybe input[type=radio]:checked { --lite: #ffe79a; --mid: #f2b705; --dark: #a87800; }
+  input[type=radio]:focus-visible { outline: 2px solid #218b96; outline-offset: 2px; }
+  input[type=radio]:disabled { cursor: default; }
 
   .sr {
     position: absolute;
@@ -236,11 +246,11 @@
   .contacts a.bezel {
     display: inline-block; padding: 4px; border-radius: 999px; text-decoration: none;
     background: linear-gradient(180deg,#fdfdfd 0%,#c9ced3 18%,#7d858c 45%,#eef1f3 52%,#a3aab0 70%,#e8ebed 88%,#8c939a 100%);
-    box-shadow: 0 6px 14px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.9) inset, 0 -1px 0 rgba(0,0,0,.25) inset;
-    transition: transform .08s, box-shadow .08s;
+    box-shadow: 0 1px 0 rgba(255,255,255,.9) inset, 0 -1px 0 rgba(0,0,0,.25) inset;   /* no outer shadow */
+    transition: transform .08s;
   }
   .contacts a.bezel:hover .gloss { filter: brightness(1.08); }
-  .contacts a.bezel:active { transform: translateY(1px); box-shadow: 0 3px 8px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.9) inset; }
+  .contacts a.bezel:active { transform: translateY(1px); }
   .contacts a.bezel:focus-visible { outline: 3px solid #f0b400; outline-offset: 3px; }
   .contacts .gloss {
     position: relative; display: inline-block; padding: 12px 26px; border-radius: 999px; overflow: hidden;
