@@ -123,7 +123,7 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 0 8px;
+    padding: 0 6px;               /* trimmed to make room for the larger buttons without widening the column */
   }
 
   .yes { background: #e2f5e9; }
@@ -134,8 +134,8 @@
   input[type=radio] {
     --lite: #ffffff; --mid: #e9eef0; --dark: #b9c3c8;      /* unselected: frosted white plastic */
     appearance: none; -webkit-appearance: none;
-    min-width: 0; width: 26px; height: 26px; margin: 0; flex: none;
-    border-radius: 50%; border: 5px solid transparent; cursor: pointer;
+    min-width: 0; width: 30px; height: 30px; margin: 0; flex: none;
+    border-radius: 50%; border: 5.5px solid transparent; cursor: pointer;
     background:
       /* plastic dome + its highlight (inside the ring) */
       radial-gradient(circle at 50% 28%, rgba(255,255,255,.95) 0 16%, rgba(255,255,255,0) 46%) padding-box,
@@ -150,7 +150,7 @@
     /* the dome sits slightly recessed: soft shadow just under the ring's top inner lip */
     box-shadow: inset 0 2px 2px rgba(0,0,0,.28);
   }
-  .yes   input[type=radio]:checked { --lite: #9ef0b4; --mid: #2fbf5c; --dark: #137a35; }
+  .yes   input[type=radio]:checked { --lite: #4cc46f; --mid: #11893a; --dark: #064a1d; }
   .no    input[type=radio]:checked { --lite: #ffb0a8; --mid: #e5483b; --dark: #9c1d14; }
   .maybe input[type=radio]:checked { --lite: #ffe79a; --mid: #f2b705; --dark: #a87800; }
   input[type=radio]:focus-visible { outline: 2px solid #218b96; outline-offset: 2px; }
