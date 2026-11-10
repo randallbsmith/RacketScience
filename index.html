@@ -232,11 +232,31 @@
 
   .contacts { margin: 0 0 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .contacts[hidden] { display: none; }
-  .contacts a {
-    display: inline-block; padding: 7px 14px; border-radius: 8px;
-    background: #279da8; color: white; font-weight: 700; text-decoration: none;
+  /* Glossy 3D plastic button in a chrome bead */
+  .contacts a.bezel {
+    display: inline-block; padding: 4px; border-radius: 999px; text-decoration: none;
+    background: linear-gradient(180deg,#fdfdfd 0%,#c9ced3 18%,#7d858c 45%,#eef1f3 52%,#a3aab0 70%,#e8ebed 88%,#8c939a 100%);
+    box-shadow: 0 6px 14px rgba(0,0,0,.28), 0 1px 0 rgba(255,255,255,.9) inset, 0 -1px 0 rgba(0,0,0,.25) inset;
+    transition: transform .08s, box-shadow .08s;
   }
-  .contacts a:hover { background: #218b96; }
+  .contacts a.bezel:hover .gloss { filter: brightness(1.08); }
+  .contacts a.bezel:active { transform: translateY(1px); box-shadow: 0 3px 8px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.9) inset; }
+  .contacts a.bezel:focus-visible { outline: 3px solid #f0b400; outline-offset: 3px; }
+  .contacts .gloss {
+    position: relative; display: inline-block; padding: 12px 26px; border-radius: 999px; overflow: hidden;
+    color: #fff; font-weight: 800; font-size: 17px; letter-spacing: .2px; text-shadow: 0 1px 1px rgba(0,60,66,.7);
+    background: radial-gradient(120% 140% at 50% 120%,#5fe3ec 0%,#2bb3bf 35%,#17808a 70%,#0f5f67 100%);
+    box-shadow: inset 0 -6px 10px rgba(0,40,45,.45), inset 0 2px 3px rgba(255,255,255,.35);
+  }
+  .contacts .gloss::before {
+    content: ""; position: absolute; left: 8%; right: 8%; top: 3px; height: 48%; border-radius: 999px;
+    background: linear-gradient(180deg,rgba(255,255,255,.85),rgba(255,255,255,.12)); pointer-events: none;
+  }
+  .contacts .gloss::after {
+    content: ""; position: absolute; left: 30%; right: 30%; bottom: 3px; height: 18%; border-radius: 999px;
+    background: radial-gradient(closest-side,rgba(180,255,255,.55),transparent); pointer-events: none;
+  }
+  .contacts .gloss > span { position: relative; }
 
   /* Placeholder roster shown while the first load is in flight */
   tbody.loading { pointer-events: none; animation: rs-pulse 1.4s ease-in-out infinite; }
@@ -346,7 +366,7 @@
   </section>
 
   <p class="contacts" id="contacts" hidden>
-    <a id="contacts-link" target="_blank" rel="noopener">🔒 Player contact info</a>
+    <a id="contacts-link" class="bezel" target="_blank" rel="noopener"><span class="gloss"><span>🔒 Player contact info</span></span></a>
     <span class="hint">Opens a Google Sheet; if asked, sign in with the Google account you used for the old web page.</span>
   </p>
 
