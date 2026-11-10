@@ -161,9 +161,18 @@
     border-radius: 10px;
   }
 
+  .count-main {
+    display: flex;
+    align-items: center;          /* label sits on the number's vertical centre */
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .count-main span { font-size: 20px; font-weight: 600; }
+
   .count strong {
-    display: block;
     font-size: 42px;
+    line-height: 1;
   }
 
   .count small {
@@ -326,8 +335,7 @@
 
   <section class="bottom">
     <div class="count" aria-live="polite" aria-atomic="true">
-      Playing
-      <strong id="count">0</strong>
+      <div class="count-main"><span>Playing:</span> <strong id="count">0</strong></div>
       <small id="possible-count" hidden>Possibly as many as <b id="possible-total"></b></small>
     </div>
 
