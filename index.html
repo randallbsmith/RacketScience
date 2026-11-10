@@ -171,12 +171,59 @@
     margin: 0 0 24px;
   }
 
+  /* Playing total: a raised plastic slab in a chrome bead, lit from above (no outer shadow) */
   .count {
     grid-column: 2;
+    position: relative;
     padding: 20px 12px;
     text-align: center;
-    background: #41bac4;
-    border-radius: 10px;
+    border: 7px solid transparent;
+    border-radius: 18px;
+    color: #15707a;
+    background:
+      radial-gradient(ellipse 52% 26% at 50% 4%, rgba(255,255,255,.55) 0%, rgba(255,255,255,.35) 55%, rgba(255,255,255,0) 100%) padding-box,
+      linear-gradient(180deg, #74d6de 0%, #47bfc9 38%, #2fa7b1 72%, #23909a 100%) padding-box,
+      linear-gradient(180deg, #c3c9ce 0px, #eef1f3 3px, #b4bbc1 7px, #e9ecef 10%, #c9cfd4 30%, #b6bdc3 46%, #adb4ba 50%, #d3d8dc 58%, #aab1b7 80%, #e3e7ea 100%) border-box;
+    box-shadow: inset 0 2px 1px rgba(255,255,255,.55), inset 0 -6px 12px rgba(0,45,50,.35);
+  }
+  .count::before {                  /* half-round chrome bead: shading across the band's width */
+    content: ""; position: absolute; inset: -7px; border-radius: 18px; pointer-events: none;
+    box-shadow:
+      inset 0 2px 1px 0 rgba(255,255,255,.75),            /* top of the bead catches the light */
+      inset 0 -2px 2px 0 rgba(40,46,52,.32),              /* underside of the bead falls into shade */
+      inset 0 0 0 1px rgba(40,46,52,.12),                 /* outer edge rolls away (faint, no outline) */
+      inset 0 0 1px 3.6px rgba(255,255,255,.62),          /* bright crest along the middle of the bead */
+      inset 0 0 1px 5.4px rgba(40,46,52,.10),
+      inset 0 0 0 7px rgba(40,46,52,.26);                 /* inner edge rolls down into shade */
+  }
+  .count::after {                   /* specular highlights on the bead, painted on top */
+    content: ""; position: absolute; inset: -7px; border-radius: 18px; pointer-events: none;
+    background:
+      /* corner pickups where the rounded top corners catch the light */
+      /* hot spot right at the outer curve, strongest at 45 degrees */
+      radial-gradient(circle at 6.2px 6.2px, #fff 0 1.1px, rgba(255,255,255,.55) 2px, rgba(255,255,255,0) 4px),
+      radial-gradient(circle at calc(100% - 6.2px) 6.2px, #fff 0 .8px, rgba(255,255,255,.45) 1.6px, rgba(255,255,255,0) 3.4px),
+      /* thin bright arc tracing the outer edge of each top corner */
+      radial-gradient(circle at 18px 18px, rgba(255,255,255,0) 0 15.4px, rgba(255,255,255,.95) 16.3px, rgba(255,255,255,0) 17.4px) left top / 18px 18px no-repeat,
+      radial-gradient(circle at 0 18px, rgba(255,255,255,0) 0 15.4px, rgba(255,255,255,.75) 16.3px, rgba(255,255,255,0) 17.4px) right top / 18px 18px no-repeat,
+      /* crisp specular line along the crest of the top edge, fading toward the ends */
+      radial-gradient(ellipse 44% 1.3px at 50% 3.3px, #fff 0%, #fff 60%, rgba(255,255,255,0) 100%),
+      /* softer glints running down the upper sides */
+      radial-gradient(ellipse 1.2px 22% at 3.6px 28%, rgba(255,255,255,.95), rgba(255,255,255,0)),
+      radial-gradient(ellipse 1.2px 18% at calc(100% - 3.6px) 26%, rgba(255,255,255,.8), rgba(255,255,255,0)),
+      /* a faint bounce of light on the lower crest */
+      radial-gradient(ellipse 36% 1px at 50% calc(100% - 3.6px), rgba(255,255,255,.55), rgba(255,255,255,0));
+  }
+  .count > * { position: relative; }
+
+  /* Engraved text: cut into the plastic. Top inner edge in shadow, bottom inner edge catches the light. */
+  .count-main span, .count strong, .count small, .count small b {
+    color: #1a7d87;
+    text-shadow: 0 -1px 1px rgba(0,40,46,.55), 0 1px 0 rgba(255,255,255,.55);
+  }
+  .count strong, .count small b {
+    color: #177680;
+    text-shadow: 0 -2px 2px rgba(0,35,40,.6), 0 2px 1px rgba(255,255,255,.6);
   }
 
   .count-main {
