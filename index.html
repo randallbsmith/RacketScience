@@ -134,13 +134,21 @@
   input[type=radio] {
     --lite: #ffffff; --mid: #e9eef0; --dark: #b9c3c8;      /* unselected: frosted white plastic */
     appearance: none; -webkit-appearance: none;
-    min-width: 0; width: 20px; height: 20px; margin: 0; flex: none;
-    border-radius: 50%; border: 2.5px solid transparent; cursor: pointer;
+    min-width: 0; width: 26px; height: 26px; margin: 0; flex: none;
+    border-radius: 50%; border: 5px solid transparent; cursor: pointer;
     background:
+      /* plastic dome + its highlight (inside the ring) */
       radial-gradient(circle at 50% 28%, rgba(255,255,255,.95) 0 16%, rgba(255,255,255,0) 46%) padding-box,
       radial-gradient(circle at 50% 75%, var(--lite) 0%, var(--mid) 55%, var(--dark) 100%) padding-box,
-      linear-gradient(180deg,#fdfdfd 0%,#c9ced3 18%,#7d858c 45%,#eef1f3 52%,#a3aab0 70%,#e8ebed 88%,#8c939a 100%) border-box;
-    box-shadow: inset 0 -2px 3px rgba(0,0,0,.18);
+      /* chrome bead: a bright crest running round the middle of the ring (no dark outline) */
+      radial-gradient(circle closest-side, transparent 0 60%, rgba(255,255,255,0) 66%,
+                      rgba(255,255,255,.85) 77%, rgba(255,255,255,0) 89%) border-box,
+      /* a glint where the light hits the top-left of the bead */
+      radial-gradient(circle at 30% 14%, rgba(255,255,255,1) 0 8%, rgba(255,255,255,0) 20%) border-box,
+      /* chrome lit from above: white top edge, shaded underside (like the contacts button) */
+      linear-gradient(180deg, #ffffff 0%, #eef1f3 18%, #b9c0c6 42%, #8d959c 62%, #c3c9ce 80%, #9aa2a9 100%) border-box;
+    /* the dome sits slightly recessed: soft shadow just under the ring's top inner lip */
+    box-shadow: inset 0 2px 2px rgba(0,0,0,.28);
   }
   .yes   input[type=radio]:checked { --lite: #9ef0b4; --mid: #2fbf5c; --dark: #137a35; }
   .no    input[type=radio]:checked { --lite: #ffb0a8; --mid: #e5483b; --dark: #9c1d14; }
@@ -554,7 +562,7 @@ function render() {
       radio.checked=player.attendance===radio.value;
       // Clicking the already-selected choice clears it (no 'change' event fires in that case).
       radio.addEventListener('click',()=>{ if(player.attendance===radio.value){ radio.checked=false; changed(null); updateCount(); } });
-      radio.addEventListener('change',()=>{changed(radio.value);updateCount();});
+      radio.addEventListener('change',()=>{changed(radio.value);updateCount();if(radio.value==='yes')burstConfetti(radio);else if(radio.value==='no')burstSmoke(radio);else if(radio.value==='maybe')burstQuestions(radio);});
       label.append(radio,document.createTextNode(choice));group.append(label);
     }
     cell.append(group);row.append(cell);
@@ -618,6 +626,88 @@ function renderPlaceholder() {
   document.getElementById('count').textContent = '–';
   status.textContent = 'Loading latest…'; status.classList.add('loading');
   alignCount();
+}
+
+// ── Confetti burst when someone picks Yes ──
+const confettiCanvas = Object.assign(document.createElement('canvas'), {ariaHidden: 'true'});
+confettiCanvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:50';
+document.body.append(confettiCanvas);
+let confetti = [], smoke = [], quest = [], confettiRunning = false;
+function burstConfetti(el) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect(), x = r.left + r.width/2, y = r.top + r.height/2;
+  const colors = ['#2fbf5c','#f2b705','#279da8','#e5483b','#ffd400','#7fb3e6','#ffffff'];
+  for (let i = 0; i < 120; i++) {
+    const a = -Math.PI/2 + (Math.random()-0.5)*Math.PI*1.1, v = 3 + Math.random()*6.5;
+    confetti.push({x, y, vx: Math.cos(a)*v, vy: Math.sin(a)*v - 2, w: 7+Math.random()*6, h: 5+Math.random()*5,
+      rot: Math.random()*6, vr: (Math.random()-0.5)*0.4, c: colors[i % colors.length], life: 0});
+  }
+  if (!confettiRunning) { confettiRunning = true; requestAnimationFrame(tickConfetti); }
+}
+function burstSmoke(el) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect(), x = r.left + r.width/2, y = r.top + r.height/2;
+  const N = 110;
+  for (let i = 0; i < N; i++) smoke.push({
+    x: x + (Math.random()-0.5)*8, y: y + (Math.random()-0.5)*4,
+    vx: 0.2 + (Math.random()-0.5)*1.1, vy: -(1.2 + Math.random()*1.4),
+    r: 5 + Math.random()*4, grow: 0.45 + Math.random()*0.5,
+    shade: 18 + (Math.random()*50|0), peak: 0.11 + Math.random()*0.12,
+    phase: Math.random()*6.3, delay: (i/N)*60 + Math.random()*8, life: 0, span: 120 + Math.random()*60
+  });
+  if (!confettiRunning) { confettiRunning = true; requestAnimationFrame(tickConfetti); }
+}
+function burstQuestions(el) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = el.getBoundingClientRect(), x = r.left + r.width/2, y = r.top + r.height/2;
+  const N = 10;
+  for (let i = 0; i < N; i++) quest.push({
+    x: x + (Math.random()-0.5)*10, y, size: r.height,               // starts the size of the button
+    vx: (Math.random()-0.5)*2.6, vy: -(1.6 + Math.random()*1.1),
+    rot: (Math.random()-0.5)*0.3, vr: (Math.random()-0.5)*0.025,     // turns a little on the way up
+    grow: 1.013 + Math.random()*0.007, delay: i*8 + Math.random()*5, life: 0, span: 90 + Math.random()*35,
+    c: ['#f2b705','#e0a400','#ffcc33','#c98f00'][i % 4]
+  });
+  if (!confettiRunning) { confettiRunning = true; requestAnimationFrame(tickConfetti); }
+}
+function drawQuestions(g) {
+  quest = quest.filter(p => p.life < p.span + p.delay);
+  for (const p of quest) {
+    p.life++; const t = p.life - p.delay; if (t < 0) continue;
+    p.x += p.vx; p.y += p.vy; p.vy *= 0.995; p.rot += p.vr; p.size *= p.grow;
+    const k = Math.min(1, t / p.span), a = k < 0.1 ? k/0.1 : Math.pow(1 - (k-0.1)/0.9, 1.3);
+    g.save(); g.globalAlpha = Math.max(0, a); g.translate(p.x, p.y); g.rotate(p.rot);
+    g.font = `800 ${p.size.toFixed(1)}px Inter, system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = Math.max(1.5, p.size/12); g.strokeStyle = 'rgba(110,75,0,.55)'; g.strokeText('?', 0, 0);
+    g.fillStyle = p.c; g.fillText('?', 0, 0); g.restore();
+  }
+}
+function drawSmoke(g) {
+  smoke = smoke.filter(p => p.life < p.span + p.delay);
+  for (const p of smoke) {
+    p.life++; const t = p.life - p.delay; if (t < 0) continue;
+    p.x += p.vx + Math.sin(t/16 + p.phase)*0.55; p.y += p.vy; p.vy *= 0.992; p.r += p.grow * (1 - t/(p.span*1.6));
+    const k = Math.min(1, t / p.span), a = p.peak * (k < 0.15 ? k/0.15 : Math.pow(1 - (k-0.15)/0.85, 1.6));
+    const grd = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+    const c = p.shade;
+    grd.addColorStop(0, `rgba(${c},${c},${c+4},${a})`);
+    grd.addColorStop(0.55, `rgba(${c},${c},${c+4},${a*0.55})`);
+    grd.addColorStop(1, `rgba(${c},${c},${c+4},0)`);
+    g.fillStyle = grd; g.beginPath(); g.arc(p.x, p.y, p.r, 0, Math.PI*2); g.fill();
+  }
+}
+function tickConfetti() {
+  const dpr = devicePixelRatio || 1, W = innerWidth, H = innerHeight;
+  if (confettiCanvas.width !== W*dpr) { confettiCanvas.width = W*dpr; confettiCanvas.height = H*dpr; }
+  const g = confettiCanvas.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
+  confetti = confetti.filter(p => p.life < 90 && p.y < H + 20);
+  for (const p of confetti) {
+    p.life++; p.vy += 0.22; p.vx *= 0.985; p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+    g.save(); g.globalAlpha = Math.max(0, 1 - p.life/90); g.translate(p.x, p.y); g.rotate(p.rot);
+    g.fillStyle = p.c; g.fillRect(-p.w/2, -p.h/2, p.w, p.h * Math.abs(Math.cos(p.life/6 + p.rot))); g.restore();
+  }
+  drawSmoke(g); drawQuestions(g);
+  if (confetti.length || smoke.length || quest.length) requestAnimationFrame(tickConfetti); else { g.clearRect(0,0,W,H); confettiRunning = false; }
 }
 
 new ResizeObserver(alignCount).observe(document.querySelector('table'));
