@@ -706,10 +706,10 @@ function burstSmoke(el) {
 }
 function burstQuestions(el) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const {x, y} = effectOrigin(el);
+  const {x, y} = effectOrigin(el), btnSize = el.getBoundingClientRect().height;
   const N = 10;
   for (let i = 0; i < N; i++) quest.push({
-    x: x + (Math.random()-0.5)*10, y, size: r.height,               // starts the size of the button
+    x: x + (Math.random()-0.5)*10, y, size: btnSize,                // starts the size of the button
     vx: (Math.random()-0.5)*2.6, vy: -(1.6 + Math.random()*1.1),
     rot: (Math.random()-0.5)*0.3, vr: (Math.random()-0.5)*0.025,     // turns a little on the way up
     grow: 1.013 + Math.random()*0.007, delay: i*8 + Math.random()*5, life: 0, span: 90 + Math.random()*35,
