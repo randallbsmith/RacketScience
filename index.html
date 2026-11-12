@@ -682,7 +682,7 @@ document.body.append(confettiCanvas);
 let confetti = [], smoke = [], quest = [], confettiRunning = false;
 function burstConfetti(el) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const r = el.getBoundingClientRect(), x = r.left + r.width/2, y = r.top + r.height/2;
+  const {x, y} = effectOrigin(el);
   const colors = ['#2fbf5c','#f2b705','#279da8','#e5483b','#ffd400','#7fb3e6','#ffffff'];
   for (let i = 0; i < 120; i++) {
     const a = -Math.PI/2 + (Math.random()-0.5)*Math.PI*1.1, v = 3 + Math.random()*6.5;
@@ -693,7 +693,7 @@ function burstConfetti(el) {
 }
 function burstSmoke(el) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const r = el.getBoundingClientRect(), x = r.left + r.width/2, y = r.top + r.height/2;
+  const {x, y} = effectOrigin(el);
   const N = 110;
   for (let i = 0; i < N; i++) smoke.push({
     x: x + (Math.random()-0.5)*8, y: y + (Math.random()-0.5)*4,
@@ -706,7 +706,7 @@ function burstSmoke(el) {
 }
 function burstQuestions(el) {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const r = el.getBoundingClientRect(), x = r.left + r.width/2, y = r.top + r.height/2;
+  const {x, y} = effectOrigin(el);
   const N = 10;
   for (let i = 0; i < N; i++) quest.push({
     x: x + (Math.random()-0.5)*10, y, size: r.height,               // starts the size of the button
@@ -743,9 +743,20 @@ function drawSmoke(g) {
     g.fillStyle = grd; g.beginPath(); g.arc(p.x, p.y, p.r, 0, Math.PI*2); g.fill();
   }
 }
+// Where to start an effect: the button's centre, measured relative to the effects layer itself.
+// (On iPhone the visible window changes height as Safari's address bar shows/hides, so never assume
+//  the layer sits at 0,0 with the window's size.)
+function effectOrigin(el) {
+  const r = el.getBoundingClientRect(), c = confettiCanvas.getBoundingClientRect();
+  return {x: r.left + r.width/2 - c.left, y: r.top + r.height/2 - c.top};
+}
 function tickConfetti() {
-  const dpr = devicePixelRatio || 1, W = innerWidth, H = innerHeight;
-  if (confettiCanvas.width !== W*dpr) { confettiCanvas.width = W*dpr; confettiCanvas.height = H*dpr; }
+  // Match the drawing surface to the layer's actual on-screen size every frame (width AND height),
+  // so nothing is stretched when the address bar collapses or expands mid-animation.
+  const dpr = devicePixelRatio || 1, box = confettiCanvas.getBoundingClientRect(), W = box.width, H = box.height;
+  if (confettiCanvas.width !== Math.round(W*dpr) || confettiCanvas.height !== Math.round(H*dpr)) {
+    confettiCanvas.width = Math.round(W*dpr); confettiCanvas.height = Math.round(H*dpr);
+  }
   const g = confettiCanvas.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,W,H);
   confetti = confetti.filter(p => p.life < 90 && p.y < H + 20);
   for (const p of confetti) {
