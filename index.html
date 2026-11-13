@@ -397,7 +397,7 @@
       <figure><figcaption>Temperature</figcaption><svg id="weather-temp" viewBox="0 0 270 140" role="img" aria-label="Hourly temperature, 8 AM to 2 PM"></svg></figure>
       <figure><figcaption>Chance of rain</figcaption><svg id="weather-rain" viewBox="0 0 270 140" role="img" aria-label="Hourly chance of rain, 8 AM to 2 PM"></svg></figure>
     </div>
-    <div class="credit"><span id="weather-asof"></span>Forecast for Palo Alto (94306) · <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>
+    <div class="credit"></div>
   </section>
 
   <p class="hint">
@@ -511,56 +511,125 @@ const GAME_START = 10.5, GAME_END = 12;             // game time, hours (10:30am
 let weatherFor = null, weatherAt = 0;
 const WX = c => c===0?['☀️','Clear']:c<=2?['🌤️','Partly cloudy']:c===3?['☁️','Cloudy']:c<=48?['🌫️','Fog']
   :c<=57?['🌦️','Drizzle']:c<=67?['🌧️','Rain']:c<=77?['🌨️','Snow']:c<=82?['🌦️','Showers']:c<=86?['🌨️','Snow showers']:['⛈️','Thunderstorms'];
-// Resilient to Open-Meteo outages: 10 s timeout, one request at a time, retry after 2 min,
-// and fall back to this device's last good forecast for the same game day (if under 6 h old).
-const WX_CACHE_KEY = 'racketScience.weather';
+// ── Weather: National Weather Service first, Open-Meteo as backup ──
+// Each source is converted to one shape: {temps[24], rain[24] (null = no data for that hour),
+// icon, words, hi, lo, rainMax, source:{name,url}}. 10 s timeout per request, one load at a time,
+// retry after 2 min, and fall back to this device's last good forecast for the same game day (< 6 h old).
+const WX_CACHE_KEY = 'racketScience.weather2', NWS_GRID_KEY = 'racketScience.nwsGrid';
 let weatherBusy = false, weatherRetryAt = 0;
+
+async function fetchJSON(url, opts = {}) {
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
+  try {
+    const r = await fetch(url, {...opts, signal: ctl.signal});
+    if (!r.ok) throw Error(url + ' ' + r.status);
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+function iconFromWords(t) {
+  t = (t || '').toLowerCase();
+  if (/thunder/.test(t)) return '⛈️';
+  if (/snow|sleet|ice/.test(t)) return '🌨️';
+  if (/rain|shower|drizzle/.test(t)) return /chance|slight|light|patchy|isolated/.test(t) ? '🌦️' : '🌧️';
+  if (/fog|haze|smoke/.test(t)) return '🌫️';
+  if (/mostly cloudy|overcast|^cloudy/.test(t)) return '☁️';
+  if (/partly|mostly sunny|mostly clear/.test(t)) return '🌤️';
+  return '☀️';
+}
+function summarize(temps, rain) {
+  const tv = temps.filter(v => v != null), rv = rain.filter(v => v != null);
+  return {hi: tv.length ? Math.max(...tv) : null, lo: tv.length ? Math.min(...tv) : null, rainMax: rv.length ? Math.max(...rv) : 0};
+}
+
+async function fetchNWS(date) {
+  const H = {Accept: 'application/geo+json'};
+  let grid = null; try { grid = localStorage.getItem(NWS_GRID_KEY); } catch {}
+  if (!grid) {                                   // look up the forecast grid for the courts once, then remember it
+    const pt = await fetchJSON(`https://api.weather.gov/points/${WEATHER_LAT},${WEATHER_LON}`, {headers: H});
+    grid = pt.properties.forecastHourly;
+    try { localStorage.setItem(NWS_GRID_KEY, grid); } catch {}
+  }
+  const j = await fetchJSON(grid, {headers: H});
+  const temps = Array(24).fill(null), rain = Array(24).fill(null), words = Array(24).fill(null), wind = Array(24).fill(null), windDir = Array(24).fill(null);
+  for (const p of j.properties.periods) {
+    if (p.startTime.slice(0, 10) !== date) continue;          // startTime is local time, e.g. 2026-11-13T10:00:00-08:00
+    const h = +p.startTime.slice(11, 13);
+    temps[h] = p.temperatureUnit === 'C' ? p.temperature * 9/5 + 32 : p.temperature;
+    rain[h] = p.probabilityOfPrecipitation?.value ?? 0;
+    words[h] = p.shortForecast;
+    const mph = String(p.windSpeed || '').match(/\d+/g); if (mph) wind[h] = Math.max(...mph.map(Number));   // "5 to 10 mph" -> 10
+    windDir[h] = p.windDirection || null;
+  }
+  if (!temps.some(v => v != null)) throw Error('NWS: no hours for ' + date);
+  const gameWords = words[11] || words[10] || words[12] || words.find(Boolean);
+  return {temps, rain, wind, windDir, words: gameWords, icon: iconFromWords(gameWords), ...summarize(temps, rain),
+          source: {name: 'National Weather Service',
+                   url: `https://forecast.weather.gov/MapClick.php?lat=${WEATHER_LAT}&lon=${WEATHER_LON}`}};
+}
+async function fetchOpenMeteo(date) {
+  const q = new URLSearchParams({latitude:WEATHER_LAT, longitude:WEATHER_LON,
+    hourly:'temperature_2m,precipitation_probability,wind_speed_10m,wind_direction_10m',
+    daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
+    temperature_unit:'fahrenheit', wind_speed_unit:'mph', timezone:'America/Los_Angeles', start_date:date, end_date:date});
+  const w = await fetchJSON('https://api.open-meteo.com/v1/forecast?' + q);
+  const [icon, words] = WX(w.daily.weather_code[0]);
+  const compass = d => d == null ? null : ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d / 22.5) % 16];
+  return {temps: w.hourly.temperature_2m, rain: w.hourly.precipitation_probability.map(v => v ?? 0), icon, words,
+          wind: (w.hourly.wind_speed_10m || []).map(v => v == null ? null : Math.round(v)), windDir: (w.hourly.wind_direction_10m || []).map(compass),
+          hi: w.daily.temperature_2m_max[0], lo: w.daily.temperature_2m_min[0], rainMax: w.daily.precipitation_probability_max[0] ?? 0,
+          source: {name: 'Open-Meteo', url: 'https://open-meteo.com/'}};
+}
+
 async function loadWeather(date) {
   if (!date || (date === weatherFor && Date.now() - weatherAt < 30*60*1000)) return;
   if (weatherBusy || Date.now() < weatherRetryAt) return;
   const box = document.getElementById('weather');
   const today = new Intl.DateTimeFormat('en-CA', {timeZone:'America/Los_Angeles'}).format(new Date());  // YYYY-MM-DD
   if (date < today) { box.hidden = true; weatherFor = date; weatherAt = Date.now(); return; }  // no "forecast" for a past game
-  const q = new URLSearchParams({latitude:WEATHER_LAT, longitude:WEATHER_LON,
-    hourly:'temperature_2m,precipitation_probability',
-    daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
-    temperature_unit:'fahrenheit', timezone:'America/Los_Angeles', start_date:date, end_date:date});
   weatherBusy = true;
-  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
   try {
-    const r = await fetch('https://api.open-meteo.com/v1/forecast?' + q, {signal: ctl.signal});
-    if (!r.ok) throw Error('weather ' + r.status);
-    const w = await r.json();
+    let n;
+    try { n = await fetchNWS(date); }
+    catch { try { localStorage.removeItem(NWS_GRID_KEY); } catch {}   // re-look-up the grid next time, in case it moved
+            n = await fetchOpenMeteo(date); }                          // backup source
     weatherFor = date; weatherAt = Date.now();
-    try { localStorage.setItem(WX_CACHE_KEY, JSON.stringify({date, at: weatherAt, w})); } catch {}
-    drawWeather(w); document.getElementById('weather-asof').textContent = ''; box.hidden = false;
+    try { localStorage.setItem(WX_CACHE_KEY, JSON.stringify({date, at: weatherAt, n})); } catch {}
+    drawWeather(n, null); box.hidden = false;
   } catch {
-    weatherRetryAt = Date.now() + 2*60*1000;                       // service down or slow: try again in 2 minutes
+    weatherRetryAt = Date.now() + 2*60*1000;                       // both down or slow: try again in 2 minutes
     let c = null; try { c = JSON.parse(localStorage.getItem(WX_CACHE_KEY) || 'null'); } catch {}
-    if (c && c.date === date && Date.now() - c.at < 6*60*60*1000) {
-      drawWeather(c.w);
-      document.getElementById('weather-asof').textContent =
-        'As of ' + new Date(c.at).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) + ' · ';
-      box.hidden = false;
-    } else box.hidden = true;
-  } finally { clearTimeout(timer); weatherBusy = false; }
+    if (c && c.date === date && Date.now() - c.at < 6*60*60*1000) { drawWeather(c.n, c.at); box.hidden = false; }
+    else box.hidden = true;
+  } finally { weatherBusy = false; }
 }
-function drawWeather(w) {
-  const d = w.daily, temps = w.hourly.temperature_2m, rain = w.hourly.precipitation_probability.map(v => v ?? 0);
-  const [icon, words] = WX(d.weather_code[0]);
+
+function drawWeather(n, savedAt) {
+  const {temps, rain} = n, r0 = v => v == null ? '–' : Math.round(v);
+  // credit line names the source that actually supplied this forecast
+  const credit = document.querySelector('#weather .credit');
+  credit.replaceChildren();
+  if (savedAt) credit.append('As of ' + new Date(savedAt).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) + ' · ');
+  credit.append('Forecast for Palo Alto (94306) · ');
+  const a = Object.assign(document.createElement('a'), {href: n.source.url, target: '_blank', rel: 'noopener', textContent: n.source.name});
+  credit.append(a);
+
   const sum = document.getElementById('weather-summary');
   sum.replaceChildren();
   const add = (cls, html) => { const s = document.createElement('span'); s.className = cls; s.innerHTML = html; sum.append(s); };
-  add('icon', icon);
-  add('words', words);
-  add('temps', `<b>${Math.round(d.temperature_2m_max[0])}°</b> / ${Math.round(d.temperature_2m_min[0])}°`);
-  add('rain', `💧 ${d.precipitation_probability_max[0] ?? 0}% chance of rain`);
-  const gHours = [10, 11, 12];
-  const gTemp = Math.round(temps[11]), gRain = Math.max(...gHours.map(h => rain[h]));
-  add('game', `<b>Game time (10:30–noon):</b> ${gTemp}°, ${gRain}% chance of rain`);
+  add('icon', n.icon);
+  add('words', n.words);
+  add('temps', `<b>${r0(n.hi)}°</b> / ${r0(n.lo)}°`);
+  add('rain', `💧 ${n.rainMax}% chance of rain`);
+  const gHours = [10, 11, 12].filter(h => rain[h] != null);
+  const gTemp = temps[11] ?? temps[12] ?? temps[10];
+  const wv = [10, 11, 12].map(h => n.wind?.[h]).filter(v => v != null);
+  const wd = n.windDir?.[11] || n.windDir?.[10] || n.windDir?.[12] || '';
+  const windTxt = !wv.length ? '' : `, wind ${Math.min(...wv) === Math.max(...wv) ? Math.max(...wv) : Math.min(...wv) + '–' + Math.max(...wv)} mph${wd ? ' ' + wd : ''}`;
+  if (gHours.length) add('game', `<b>Game time (10:30–noon):</b> ${r0(gTemp)}°, ${Math.max(...gHours.map(h => rain[h]))}% chance of rain${windTxt}`);
 
   const H0 = 8, H1 = 14;                         // chart window: 8 AM – 2 PM
   const hrs = []; for (let h = H0; h <= H1; h++) hrs.push(h);
+  const has = hrs.filter(h => temps[h] != null);  // NWS omits hours that have already passed
   const W = 270, Hh = 140, L = 30, R = 10, T = 14, B = 22, ph = Hh - T - B, pw = W - L - R;
   const x = h => L + pw * (h - H0) / (H1 - H0);
   const lab = h => h === 12 ? '12PM' : h < 12 ? h + 'AM' : (h - 12) + 'PM';
@@ -573,15 +642,18 @@ function drawWeather(w) {
   };
 
   // Temperature
-  const tv = hrs.map(h => temps[h]);
-  const lo = Math.floor(Math.min(...tv) / 5) * 5 - 5, hi = Math.ceil(Math.max(...tv) / 5) * 5 + 5;
-  const yT = v => T + ph * (hi - v) / (hi - lo);
-  const tLines = []; for (let v = lo; v <= hi; v += 5) tLines.push([yT(v), v + '°']);
-  let ts = frame(tLines);
-  const pts = hrs.map(h => `${x(h)},${yT(temps[h])}`).join(' ');
-  ts += `<polygon points="${x(H0)},${T+ph} ${pts} ${x(H1)},${T+ph}" fill="#279da8" opacity="0.12"/>`
-      + `<polyline points="${pts}" fill="none" stroke="#279da8" stroke-width="2.5" stroke-linejoin="round"/>`;
-  for (const h of hrs) ts += `<circle cx="${x(h)}" cy="${yT(temps[h])}" r="3" fill="#279da8"/><text x="${x(h)}" y="${yT(temps[h])-6}" font-size="9" text-anchor="middle" fill="#243c32">${Math.round(temps[h])}°</text>`;
+  let ts;
+  if (has.length) {
+    const tv = has.map(h => temps[h]);
+    const lo = Math.floor(Math.min(...tv) / 5) * 5 - 5, hi = Math.ceil(Math.max(...tv) / 5) * 5 + 5;
+    const yT = v => T + ph * (hi - v) / (hi - lo);
+    const tLines = []; for (let v = lo; v <= hi; v += 5) tLines.push([yT(v), v + '°']);
+    ts = frame(tLines);
+    const pts = has.map(h => `${x(h)},${yT(temps[h])}`).join(' ');
+    if (has.length > 1) ts += `<polygon points="${x(has[0])},${T+ph} ${pts} ${x(has[has.length-1])},${T+ph}" fill="#279da8" opacity="0.12"/>`
+        + `<polyline points="${pts}" fill="none" stroke="#279da8" stroke-width="2.5" stroke-linejoin="round"/>`;
+    for (const h of has) ts += `<circle cx="${x(h)}" cy="${yT(temps[h])}" r="3" fill="#279da8"/><text x="${x(h)}" y="${yT(temps[h])-6}" font-size="9" text-anchor="middle" fill="#243c32">${Math.round(temps[h])}°</text>`;
+  } else ts = frame([]);
   document.getElementById('weather-temp').innerHTML = ts;
 
   // Chance of rain
@@ -589,7 +661,7 @@ function drawWeather(w) {
   let rs = frame([[yR(0),'0%'],[yR(50),'50%'],[yR(100),'100%']]);
   const bw = pw / (H1 - H0) * 0.55;
   for (const h of hrs) {
-    const v = rain[h];
+    const v = rain[h]; if (v == null) continue;
     if (v > 0) rs += `<rect x="${x(h)-bw/2}" y="${yR(v)}" width="${bw}" height="${T+ph-yR(v)}" fill="#4a90d9" opacity="0.7"/>`;
     rs += `<text x="${x(h)}" y="${(v > 0 ? yR(v) : T+ph) - 4}" font-size="9" text-anchor="middle" fill="#2f6fb0">${v}%</text>`;
   }
