@@ -367,6 +367,22 @@
   .weather .credit { text-align: right; font-size: 10px; color: #8a9b92; }
   .weather .credit a { color: inherit; }
 
+  /* Row guard: confirm edits to rows this device doesn't normally set */
+  #row-guard { border: 0; padding: 0; border-radius: 14px; background: #fff; color: #243c32;
+    box-shadow: 0 12px 40px rgba(0,0,0,.28); max-width: calc(100vw - 32px); }
+  #row-guard::backdrop { background: rgba(20,40,32,.35); }
+  #row-guard form { padding: 18px 22px 16px; text-align: center; }
+  #row-guard p { margin: 0; }
+  #row-guard .guard-q { font-size: 18px; font-weight: 700; }
+  #row-guard .who { color: #5b7066; margin: 4px 0 14px; }
+  #row-guard .buttons { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  #row-guard button { font: inherit; font-weight: 600; padding: 8px 14px; min-width: 84px; border-radius: 8px;
+    border: 1px solid #9fc7cb; background: #fff; color: #1d6f77; cursor: pointer; }
+  #row-guard button.primary { background: #279da8; border-color: #279da8; color: #fff; }
+  tr.confirming input[type=text] { background: #fff6d6; }
+  .device-rows button { font: inherit; color: #279da8; background: none; border: 0; padding: 0;
+    text-decoration: underline; cursor: pointer; }
+
   @media (max-width: 600px) {
     main { padding: 14px; }
     h1 { font-size: 24px; white-space: nowrap; }
@@ -402,7 +418,7 @@
 
   <p class="hint">
     <span id="save-status" role="status">Loading roster…</span> <a href="./" id="reload" hidden>Reload to review</a>
-   
+    <span id="device-rows" class="device-rows" hidden></span>
   </p>
 
   <div class="scroll">
@@ -442,6 +458,18 @@
   </div>
 </main>
 
+<dialog id="row-guard" aria-labelledby="guard-q">
+  <form method="dialog">
+    <p class="guard-q" id="guard-q">Edit this row?</p>
+    <p class="who"></p>
+    <div class="buttons">
+      <button value="once" class="primary" autofocus>This time</button>
+      <button value="always">Always</button>
+      <button value="">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 "use strict";
 // Google Apps Script web app that reads/writes the Google Sheet (see apps-script/Code.gs)
@@ -464,6 +492,53 @@ function stop(message) {
   status.textContent = message + ' Your unsaved text remains visible; copy it before reloading.';
   document.getElementById('reload').hidden = false;
 }
+// ── Row guard: each device learns which rows it normally sets; edits to other rows ask first ──
+const DEVICE_KEY = 'racketScience.device', CLAIM_AFTER = 3;
+let device = null;
+try { device = JSON.parse(localStorage.getItem(DEVICE_KEY) || 'null'); } catch {}
+if (!device || typeof device !== 'object') device = {};
+device.id ||= (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+device.counts ||= {};   // rowId -> {name, n}: unprompted attendance taps while learning
+device.mine ||= {};     // rowId -> name: this device's own rows
+function saveDevice() { try { localStorage.setItem(DEVICE_KEY, JSON.stringify(device)); } catch {} }
+saveDevice();
+const deviceRows = document.getElementById('device-rows');
+function showDeviceRows() {
+  const names = Object.values(device.mine);
+  deviceRows.hidden = !names.length;
+  if (!names.length) return;
+  const forget = Object.assign(document.createElement('button'), {type: 'button', textContent: 'forget'});
+  forget.onclick = () => { device.mine = {}; device.counts = {}; saveDevice(); showDeviceRows(); };
+  deviceRows.replaceChildren(`· This device's rows: ${names.join(', ')} (`, forget, ')');
+}
+function pruneDevice() {   // rows shift when players are added or archived: drop anything whose name no longer matches
+  const names = new Map(state.players.map(p => [p.id, p.name]));
+  for (const id in device.mine) if (names.get(id) !== device.mine[id]) delete device.mine[id];
+  for (const id in device.counts) if (names.get(id) !== device.counts[id].name) delete device.counts[id];
+  saveDevice(); showDeviceRows();
+}
+const rowGuarded = p => Object.keys(device.mine).length > 0 && !(p.id in device.mine);
+function claimRow(p) { device.mine[p.id] = p.name; saveDevice(); showDeviceRows(); }
+function noteRowUse(p) {
+  let c = device.counts[p.id];
+  if (!c || c.name !== p.name) c = device.counts[p.id] = {name: p.name, n: 0};
+  c.n++;
+  if (c.n >= CLAIM_AFTER) device.mine[p.id] = p.name;
+  saveDevice(); showDeviceRows();
+}
+const guard = document.getElementById('row-guard');
+guard.addEventListener('click', e => { if (e.target === guard) guard.close(''); });  // tap outside = Cancel
+function askEdit(player, row) {
+  guard.querySelector('.who').textContent = player.name;
+  row.classList.add('confirming');
+  guard.returnValue = '';
+  guard.showModal();
+  return new Promise(resolve => guard.addEventListener('close', () => {
+    row.classList.remove('confirming'); resolve(guard.returnValue);
+  }, {once: true}));
+}
+function celebrate(r) { if(r.value==='yes')burstConfetti(r);else if(r.value==='no')burstSmoke(r);else if(r.value==='maybe')burstQuestions(r); }
+
 function updateCount() {
   const yes = state.players.filter(p=>p.attendance==='yes').length;
   const maybe = state.players.filter(p=>p.attendance==='maybe').length;
@@ -696,9 +771,24 @@ function render() {
       const label=document.createElement('label'), radio=document.createElement('input');
       label.className=choice.toLowerCase(); radio.type='radio'; radio.name=player.id+'-attendance'; radio.value=choice.toLowerCase();
       radio.checked=player.attendance===radio.value;
-      // Clicking the already-selected choice clears it (no 'change' event fires in that case).
-      radio.addEventListener('click',()=>{ if(player.attendance===radio.value){ radio.checked=false; changed(null); updateCount(); } });
-      radio.addEventListener('change',()=>{changed(radio.value);updateCount();if(radio.value==='yes')burstConfetti(radio);else if(radio.value==='no')burstSmoke(radio);else if(radio.value==='maybe')burstQuestions(radio);});
+      radio.addEventListener('click',ev=>{
+        // Clicking the already-selected choice clears it (no 'change' event fires in that case).
+        const clearing = player.attendance===radio.value;
+        if (rowGuarded(player)) {
+          ev.preventDefault();   // undo the tap for now (no 'change' fires); apply it only if confirmed
+          askEdit(player,row).then(answer=>{
+            if (!answer || stopped) return;
+            if (answer==='always') claimRow(player);
+            if (clearing) { radio.checked=false; changed(null); }
+            else { radio.checked=true; changed(radio.value); celebrate(radio); }
+            updateCount();
+          });
+          return;
+        }
+        noteRowUse(player);
+        if (clearing) { radio.checked=false; changed(null); updateCount(); }
+      });
+      radio.addEventListener('change',()=>{changed(radio.value);updateCount();celebrate(radio);});
       label.append(radio,document.createTextNode(choice));group.append(label);
     }
     cell.append(group);row.append(cell);
@@ -711,7 +801,7 @@ function render() {
   const changeNotes=track(state,'notes');
   notes.oninput=()=>changeNotes(notes.value);
   notes.onblur=()=>save(edits.get('team:notes'));
-  updateCount();alignCount();loadWeather(state.gameDate);
+  pruneDevice();updateCount();alignCount();loadWeather(state.gameDate);
 }
 function alignCount() {
   if(!tbody.rows.length)return;
@@ -720,7 +810,7 @@ function alignCount() {
   bottom.style.setProperty('--attendance-width',`${box.width}px`);
 }
 async function load(initial=false) {
-  if(stopped || dirty() || (!initial && ['INPUT','TEXTAREA'].includes(document.activeElement.tagName)))return;
+  if(stopped || guard.open || dirty() || (!initial && ['INPUT','TEXTAREA'].includes(document.activeElement.tagName)))return;
   try {
     const incoming=await callScript({action:'read'});
     if(!incoming.ok)throw Error(incoming.message||'load');
