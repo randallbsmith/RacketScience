@@ -493,39 +493,26 @@ function stop(message) {
   document.getElementById('reload').hidden = false;
 }
 // ── Row guard: each device learns which rows it normally sets; edits to other rows ask first ──
-const DEVICE_KEY = 'racketScience.device', CLAIM_AFTER = 3;
-let device = null;
-try { device = JSON.parse(localStorage.getItem(DEVICE_KEY) || 'null'); } catch {}
-if (!device || typeof device !== 'object') device = {};
-device.id ||= (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
-device.counts ||= {};   // rowId -> {name, n}: unprompted attendance taps while learning
-device.mine ||= {};     // rowId -> name: this device's own rows
-function saveDevice() { try { localStorage.setItem(DEVICE_KEY, JSON.stringify(device)); } catch {} }
-saveDevice();
+// Tap counts live in the sheet's Devices column (J) as "deviceId:count" entries; a row with
+// count ≥ 3 belongs to that device. Edit or delete an entry there to reset a device.
+// The only thing kept on the device itself is its short random ID.
+const DEVICE_KEY = 'racketScience.device';
+let deviceId = '';
+try { deviceId = (JSON.parse(localStorage.getItem(DEVICE_KEY) || 'null') || {}).id || ''; } catch {}
+if (!/^[a-z0-9]{8}$/.test(deviceId)) {
+  const b = new Uint8Array(8); crypto.getRandomValues(b);
+  deviceId = [...b].map(x => 'abcdefghijkmnpqrstuvwxyz23456789'[x & 31]).join('');
+}
+try { localStorage.setItem(DEVICE_KEY, JSON.stringify({id: deviceId})); } catch {}
+let mine = new Set();       // row ids this device owns, as reported by the sheet
 const deviceRows = document.getElementById('device-rows');
 function showDeviceRows() {
-  const names = Object.values(device.mine);
-  deviceRows.hidden = !names.length;
-  if (!names.length) return;
-  const forget = Object.assign(document.createElement('button'), {type: 'button', textContent: 'forget'});
-  forget.onclick = () => { device.mine = {}; device.counts = {}; saveDevice(); showDeviceRows(); };
-  deviceRows.replaceChildren(`· This device's rows: ${names.join(', ')} (`, forget, ')');
+  const names = state ? state.players.filter(p => mine.has(p.id)).map(p => p.name) : [];
+  deviceRows.hidden = false;
+  deviceRows.textContent = `· This device: ${deviceId}` + (names.length ? ` (rows: ${names.join(', ')})` : '');
 }
-function pruneDevice() {   // rows shift when players are added or archived: drop anything whose name no longer matches
-  const names = new Map(state.players.map(p => [p.id, p.name]));
-  for (const id in device.mine) if (names.get(id) !== device.mine[id]) delete device.mine[id];
-  for (const id in device.counts) if (names.get(id) !== device.counts[id].name) delete device.counts[id];
-  saveDevice(); showDeviceRows();
-}
-const rowGuarded = p => Object.keys(device.mine).length > 0 && !(p.id in device.mine);
-function claimRow(p) { device.mine[p.id] = p.name; saveDevice(); showDeviceRows(); }
-function noteRowUse(p) {
-  let c = device.counts[p.id];
-  if (!c || c.name !== p.name) c = device.counts[p.id] = {name: p.name, n: 0};
-  c.n++;
-  if (c.n >= CLAIM_AFTER) device.mine[p.id] = p.name;
-  saveDevice(); showDeviceRows();
-}
+const rowGuarded = p => mine.size > 0 && !mine.has(p.id);
+const attendanceMeta = new Map();   // playerId -> {count:1} or {claim:1}, sent with the next attendance save
 const guard = document.getElementById('row-guard');
 guard.addEventListener('click', e => { if (e.target === guard) guard.close(''); });  // tap outside = Cancel
 function askEdit(player, row) {
@@ -570,8 +557,12 @@ async function save(edit) {
   status.textContent = 'Saving…';
   const value = edit.desired;
   try {
-    const body = await callScript({action:'update',gameDate:edit.gameDate,playerId:edit.target.id||'',field:edit.field,previous:edit.previous??'',value:value??''});
+    const params = {action:'update',gameDate:edit.gameDate,playerId:edit.target.id||'',field:edit.field,previous:edit.previous??'',value:value??''};
+    const meta = edit.field==='attendance' && attendanceMeta.get(edit.target.id);
+    if (meta) { Object.assign(params, {device: deviceId}, meta); attendanceMeta.delete(edit.target.id); }
+    const body = await callScript(params);
     if (!body.ok) { stop(body.message || 'Could not save.'); return; }
+    if (body.mine === true && !mine.has(edit.target.id)) { mine.add(edit.target.id); showDeviceRows(); }
     edit.previous = value;
   } catch { stop('Connection lost. The last save could not be confirmed.'); }
   finally {
@@ -778,14 +769,14 @@ function render() {
           ev.preventDefault();   // undo the tap for now (no 'change' fires); apply it only if confirmed
           askEdit(player,row).then(answer=>{
             if (!answer || stopped) return;
-            if (answer==='always') claimRow(player);
+            if (answer==='always') { attendanceMeta.set(player.id,{claim:1}); mine.add(player.id); showDeviceRows(); }
             if (clearing) { radio.checked=false; changed(null); }
             else { radio.checked=true; changed(radio.value); celebrate(radio); }
             updateCount();
           });
           return;
         }
-        noteRowUse(player);
+        attendanceMeta.set(player.id,{count:1});   // an unprompted tap: counts toward this device owning the row
         if (clearing) { radio.checked=false; changed(null); updateCount(); }
       });
       radio.addEventListener('change',()=>{changed(radio.value);updateCount();celebrate(radio);});
@@ -801,7 +792,7 @@ function render() {
   const changeNotes=track(state,'notes');
   notes.oninput=()=>changeNotes(notes.value);
   notes.onblur=()=>save(edits.get('team:notes'));
-  pruneDevice();updateCount();alignCount();loadWeather(state.gameDate);
+  showDeviceRows();updateCount();alignCount();loadWeather(state.gameDate);
 }
 function alignCount() {
   if(!tbody.rows.length)return;
@@ -809,13 +800,15 @@ function alignCount() {
   bottom.style.setProperty('--player-width',`${Math.max(0,box.left-bottom.getBoundingClientRect().left)}px`);
   bottom.style.setProperty('--attendance-width',`${box.width}px`);
 }
+const typing=()=>{const a=document.activeElement;return a&&(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&a.type==='text'));};
 async function load(initial=false) {
-  if(stopped || guard.open || dirty() || (!initial && ['INPUT','TEXTAREA'].includes(document.activeElement.tagName)))return;
+  if(stopped || guard.open || dirty() || (!initial && typing()))return;
   try {
-    const incoming=await callScript({action:'read'});
+    const incoming=await callScript({action:'read',device:deviceId});
     if(!incoming.ok)throw Error(incoming.message||'load');
     // Recheck after awaiting the network: typing may have started in the meantime.
-    if(dirty() || (!initial && ['INPUT','TEXTAREA'].includes(document.activeElement.tagName)))return;
+    if(dirty() || (!initial && typing()))return;
+    mine=new Set(Array.isArray(incoming.mine)?incoming.mine.map(String):[]);
     state=incoming;tbody.classList.remove('loading');tbody.removeAttribute('aria-busy');status.classList.remove('loading');
     render();cacheRoster();status.textContent='All changes saved.';
   } catch {status.classList.remove('loading');status.textContent=tbody.classList.contains('loading')?'Still waiting for the roster… retrying.':'Unable to load updates. Check your connection.';}
