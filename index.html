@@ -397,7 +397,7 @@
       <figure><figcaption>Temperature</figcaption><svg id="weather-temp" viewBox="0 0 270 140" role="img" aria-label="Hourly temperature, 8 AM to 2 PM"></svg></figure>
       <figure><figcaption>Chance of rain</figcaption><svg id="weather-rain" viewBox="0 0 270 140" role="img" aria-label="Hourly chance of rain, 8 AM to 2 PM"></svg></figure>
     </div>
-    <div class="credit">Forecast for Palo Alto (94306) · <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>
+    <div class="credit"><span id="weather-asof"></span>Forecast for Palo Alto (94306) · <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></div>
   </section>
 
   <p class="hint">
@@ -511,8 +511,13 @@ const GAME_START = 10.5, GAME_END = 12;             // game time, hours (10:30am
 let weatherFor = null, weatherAt = 0;
 const WX = c => c===0?['☀️','Clear']:c<=2?['🌤️','Partly cloudy']:c===3?['☁️','Cloudy']:c<=48?['🌫️','Fog']
   :c<=57?['🌦️','Drizzle']:c<=67?['🌧️','Rain']:c<=77?['🌨️','Snow']:c<=82?['🌦️','Showers']:c<=86?['🌨️','Snow showers']:['⛈️','Thunderstorms'];
+// Resilient to Open-Meteo outages: 10 s timeout, one request at a time, retry after 2 min,
+// and fall back to this device's last good forecast for the same game day (if under 6 h old).
+const WX_CACHE_KEY = 'racketScience.weather';
+let weatherBusy = false, weatherRetryAt = 0;
 async function loadWeather(date) {
   if (!date || (date === weatherFor && Date.now() - weatherAt < 30*60*1000)) return;
+  if (weatherBusy || Date.now() < weatherRetryAt) return;
   const box = document.getElementById('weather');
   const today = new Intl.DateTimeFormat('en-CA', {timeZone:'America/Los_Angeles'}).format(new Date());  // YYYY-MM-DD
   if (date < today) { box.hidden = true; weatherFor = date; weatherAt = Date.now(); return; }  // no "forecast" for a past game
@@ -520,13 +525,25 @@ async function loadWeather(date) {
     hourly:'temperature_2m,precipitation_probability',
     daily:'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max',
     temperature_unit:'fahrenheit', timezone:'America/Los_Angeles', start_date:date, end_date:date});
+  weatherBusy = true;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 10000);
   try {
-    const r = await fetch('https://api.open-meteo.com/v1/forecast?' + q);
-    if (!r.ok) throw Error('weather ' + r.status);   // e.g. date too far out or in the past
+    const r = await fetch('https://api.open-meteo.com/v1/forecast?' + q, {signal: ctl.signal});
+    if (!r.ok) throw Error('weather ' + r.status);
     const w = await r.json();
     weatherFor = date; weatherAt = Date.now();
-    drawWeather(w); box.hidden = false;
-  } catch { box.hidden = true; }
+    try { localStorage.setItem(WX_CACHE_KEY, JSON.stringify({date, at: weatherAt, w})); } catch {}
+    drawWeather(w); document.getElementById('weather-asof').textContent = ''; box.hidden = false;
+  } catch {
+    weatherRetryAt = Date.now() + 2*60*1000;                       // service down or slow: try again in 2 minutes
+    let c = null; try { c = JSON.parse(localStorage.getItem(WX_CACHE_KEY) || 'null'); } catch {}
+    if (c && c.date === date && Date.now() - c.at < 6*60*60*1000) {
+      drawWeather(c.w);
+      document.getElementById('weather-asof').textContent =
+        'As of ' + new Date(c.at).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) + ' · ';
+      box.hidden = false;
+    } else box.hidden = true;
+  } finally { clearTimeout(timer); weatherBusy = false; }
 }
 function drawWeather(w) {
   const d = w.daily, temps = w.hourly.temperature_2m, rain = w.hourly.precipitation_probability.map(v => v ?? 0);
