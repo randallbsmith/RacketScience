@@ -9,6 +9,11 @@
 <style>
   * { box-sizing: border-box; }
 
+  /* The teal plastic shared by the contacts button and the Playing panel: change it here for both. */
+  :root {
+    --teal-plastic: radial-gradient(120% 140% at 50% 120%, #86eef4 0%, #4cc8d2 35%, #2a9ea8 70%, #1e7e87 100%);
+  }
+
   body {
     margin: 0;
     background: #f4f7f5;
@@ -182,7 +187,7 @@
     color: #15707a;
     background:
       radial-gradient(ellipse 52% 26% at 50% 4%, rgba(255,255,255,.55) 0%, rgba(255,255,255,.35) 55%, rgba(255,255,255,0) 100%) padding-box,
-      radial-gradient(120% 140% at 50% 120%, #5fe3ec 0%, #2bb3bf 35%, #17808a 70%, #0f5f67 100%) padding-box,   /* same teal as the contacts button */
+      var(--teal-plastic) padding-box,   /* same teal as the contacts button */
       linear-gradient(180deg, #c3c9ce 0px, #eef1f3 3px, #b4bbc1 7px, #e9ecef 10%, #c9cfd4 30%, #b6bdc3 46%, #adb4ba 50%, #d3d8dc 58%, #aab1b7 80%, #e3e7ea 100%) border-box;
     box-shadow: inset 0 2px 1px rgba(255,255,255,.55), inset 0 -6px 12px rgba(0,45,50,.35);
   }
@@ -310,7 +315,7 @@
   .contacts .gloss {
     position: relative; display: inline-block; padding: 12px 26px; border-radius: 999px; overflow: hidden;
     color: #fff; font-weight: 800; font-size: 17px; letter-spacing: .2px; text-shadow: 0 1px 1px rgba(0,60,66,.7);
-    background: radial-gradient(120% 140% at 50% 120%,#5fe3ec 0%,#2bb3bf 35%,#17808a 70%,#0f5f67 100%);
+    background: var(--teal-plastic);
     box-shadow: inset 0 -6px 10px rgba(0,40,45,.45), inset 0 2px 3px rgba(255,255,255,.35);
   }
   .contacts .gloss::before {
