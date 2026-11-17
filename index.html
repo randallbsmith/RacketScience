@@ -360,6 +360,7 @@
   .wx-row .weather { margin: 0; grid-column: 2; grid-row: 1; }
   .court-photo { margin: 0; grid-row: 1; }
   .court-photo + .weather + .court-photo { grid-column: 3; }
+  .bottom.racket-above { margin-top: 56px; }   /* room for the racket's resting spot on narrow screens */
   .court-photo img { display: block; width: 100%; height: 100%; object-fit: cover;
     border: 1px solid #cbd9d0; border-radius: 10px; }
   .wx-row:has(.weather[hidden]) { grid-template-columns: repeat(2, minmax(0, 333px)); }   /* no forecast: photos only */
@@ -1007,7 +1008,7 @@ function launchBalls(n = 15) {
     x = Math.max(BALL_R, Math.min(W - BALL_R, x));
     balls.push({x, y, vx, vy: 0, spin: Math.random()*6.3, age: 0});
   }
-  if (!ballsRunning) { ballsRunning = true; ballsLast = performance.now(); requestAnimationFrame(tickBalls); }
+  startBallLoop();
 }
 
 // Everything a ball can hit, as rounded rectangles in page coordinates (a circle is a fully rounded square).
@@ -1080,13 +1081,18 @@ function tickBalls(now) {
     ballCanvas.width = Math.round(W*dpr); ballCanvas.height = Math.round(H*dpr);
   }
   const obs = ballObstacles(), docEl = document.documentElement, pageH = docEl.scrollHeight, pageW = docEl.clientWidth;
-  // Small sub-steps (sized for the fastest ball) so nothing skips through a button or another ball between frames.
+  const racketMoving = stepRacket(dt);
+  // Small sub-steps (sized for the fastest ball plus the racket's own speed) so nothing skips through a button, another
+  // ball or the racket between frames. The racket slides from last frame's spot to this one's across the sub-steps.
   let vmax = 0; for (const b of balls) vmax = Math.max(vmax, Math.hypot(b.vx, Math.abs(b.vy) + GRAVITY*dt));
-  const steps = Math.max(1, Math.ceil(vmax*dt / (BALL_R/2))), h = dt/steps;
+  if (balls.length) vmax += Math.hypot(racket.vx, racket.vy);
+  const steps = Math.max(1, Math.min(400, Math.ceil(vmax*dt / (BALL_R/2)))), h = dt/steps;
   for (let s = 0; s < steps; s++) {
+    const f = (s + 1)/steps, rx = racket.px + (racket.x - racket.px)*f, ry = racket.py + (racket.y - racket.py)*f;
     for (const b of balls) {
       b.vy += GRAVITY*h; b.x += b.vx*h; b.y += b.vy*h;
       for (const o of obs) if (b.x + BALL_R > o.l && b.x - BALL_R < o.r && b.y + BALL_R > o.t && b.y - BALL_R < o.b) bounceBall(b, o);
+      if (racket.placed) hitRacket(b, rx, ry);
       // The left and right edges of the page are solid walls.
       if (b.x < BALL_R) { b.x = BALL_R; if (b.vx < 0) b.vx = -b.vx*RESTITUTION; }
       else if (b.x > pageW - BALL_R) { b.x = pageW - BALL_R; if (b.vx > 0) b.vx = -b.vx*RESTITUTION; }
@@ -1102,12 +1108,122 @@ function tickBalls(now) {
     if (x < -BALL_R || x > W + BALL_R || y < -BALL_R || y > H + BALL_R) continue;
     drawBall(g, x, y, b.spin, Math.min(1, (BALL_MAX_AGE - b.age)/2));
   }
-  if (balls.length) requestAnimationFrame(tickBalls); else ballsRunning = false;
+  if (balls.length || racketMoving) requestAnimationFrame(tickBalls); else ballsRunning = false;
+}
+
+// ── The racket: drag it with the mouse (or a finger) and swat the balls. It sits to the left of the Playing panel, drawn
+//    level and seen from the side but tilted about 30° toward the viewer so the strings show. While it's held, one ball
+//    drops in each second (aimed like the others); on release it glides back home. To the balls it's just another
+//    obstacle, but a moving one of unlimited weight: a hit reflects the ball's velocity *relative to the racket*, then
+//    adds the racket's velocity back, so a swing sends the ball flying. A struck ball's fade-out clock restarts.
+const RK = {w: 184, h: 48,                       // drawing size (px); everything below is in the drawing's own coordinates
+            hx: 136, hy: 24, ha: 46, hb: 19,     // head: ellipse centre and half-length / half-height to the frame's outer edge
+            x0: 6, x1: 94, hr: 6,                // handle + throat: a rounded bar along the centre line, radius hr
+            e: 0.85};                            // strings are bouncier than the page's buttons
+const racketEl = document.createElement('div');
+racketEl.id = 'racket';
+racketEl.setAttribute('aria-hidden', 'true');
+racketEl.style.cssText = `position:absolute;left:0;top:0;width:${RK.w}px;height:${RK.h}px;z-index:48;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none`;
+racketEl.innerHTML = `<svg width="${RK.w}" height="${RK.h}" viewBox="0 0 ${RK.w} ${RK.h}" style="display:block;overflow:visible">
+  <defs>
+    <linearGradient id="rk-frame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5fd0da"/><stop offset=".5" stop-color="#1f8f99"/><stop offset="1" stop-color="#0d5b62"/></linearGradient>
+    <linearGradient id="rk-grip" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b6b70"/><stop offset=".45" stop-color="#26343a"/><stop offset="1" stop-color="#11191c"/></linearGradient>
+    <clipPath id="rk-bed"><ellipse cx="136" cy="24" rx="41" ry="14.6"/></clipPath>
+    <pattern id="rk-wrap" width="5" height="12" patternUnits="userSpaceOnUse" patternTransform="skewX(-35)"><rect width="1" height="12" fill="rgba(255,255,255,.16)"/></pattern>
+  </defs>
+  <ellipse cx="94" cy="44" rx="86" ry="3" fill="rgba(0,0,0,.10)"/>
+  <ellipse cx="136" cy="27" rx="44" ry="17" fill="none" stroke="#0a464c" stroke-width="4.5"/>
+  <path d="M60 21.5 L97 13.5 M60 26.5 L97 34.5" stroke="#0a464c" stroke-width="4.2" stroke-linecap="round" transform="translate(0 1.6)"/>
+  <path d="M60 21.5 L97 13.5 M60 26.5 L97 34.5" stroke="url(#rk-frame)" stroke-width="3.8" stroke-linecap="round"/>
+  <g clip-path="url(#rk-bed)" stroke="rgba(250,250,238,.9)" stroke-width=".65">
+    ${Array.from({length: 11}, (_, i) => `<line x1="92" x2="180" y1="${(24 - 13.5 + i*2.7).toFixed(1)}" y2="${(24 - 13.5 + i*2.7).toFixed(1)}"/>`).join('')}
+    ${Array.from({length: 17}, (_, i) => `<line y1="8" y2="40" x1="${(96 + i*5).toFixed(1)}" x2="${(96 + i*5).toFixed(1)}"/>`).join('')}
+  </g>
+  <ellipse cx="136" cy="24" rx="44" ry="17" fill="none" stroke="url(#rk-frame)" stroke-width="4.5"/>
+  <path d="M104 11.2 Q136 4.6 168 11.2" fill="none" stroke="rgba(255,255,255,.75)" stroke-width="1.2" stroke-linecap="round"/>
+  <rect x="7" y="18.5" width="56" height="11" rx="3.5" fill="url(#rk-grip)"/>
+  <rect x="7" y="18.5" width="56" height="11" rx="3.5" fill="url(#rk-wrap)"/>
+  <rect x="3" y="17.5" width="6" height="13" rx="2.4" fill="#1a2428"/>
+  <rect x="61" y="19.5" width="4" height="9" rx="1.2" fill="#d6ea2c"/>
+</svg>`;
+document.body.append(racketEl);
+const racket = {x: 0, y: 0, px: 0, py: 0, vx: 0, vy: 0, held: false, returning: false, gx: 0, gy: 0, tx: 0, ty: 0, timer: 0, placed: false};
+// Home is just left of the Playing panel. On narrow screens the panel spans the page, so the racket gets a strip of its own above it.
+function racketHome() {
+  const bottom = document.querySelector('.bottom'), c = document.querySelector('.count').getBoundingClientRect();
+  const above = c.left - RK.w - 16 < 2;
+  if (bottom.classList.contains('racket-above') !== above) bottom.classList.toggle('racket-above', above);
+  const c2 = document.querySelector('.count').getBoundingClientRect();
+  return above ? {x: c2.left + scrollX + 4, y: c2.top + scrollY - RK.h - 4}
+               : {x: c2.left + scrollX - RK.w - 16, y: c2.top + scrollY + c2.height/2 - RK.h/2};
+}
+function showRacket() { racketEl.style.transform = `translate(${racket.x}px, ${racket.y}px)`; }
+function placeRacketHome() {                     // keep the resting racket beside the panel as the layout changes
+  if (racket.held || racket.returning) return;
+  const h = racketHome(); racket.x = racket.px = h.x; racket.y = racket.py = h.y; racket.placed = true; showRacket();
+}
+new ResizeObserver(placeRacketHome).observe(document.body);
+window.addEventListener('resize', placeRacketHome);
+function startBallLoop() { if (!ballsRunning) { ballsRunning = true; ballsLast = performance.now(); requestAnimationFrame(tickBalls); } }
+racketEl.addEventListener('pointerdown', ev => {
+  ev.preventDefault();
+  racketEl.setPointerCapture(ev.pointerId);
+  racket.held = true; racket.returning = false; racketEl.style.cursor = 'grabbing';
+  racket.gx = ev.pageX - racket.x; racket.gy = ev.pageY - racket.y; racket.tx = racket.x; racket.ty = racket.y;
+  launchBalls(1); clearInterval(racket.timer); racket.timer = setInterval(() => launchBalls(1), 1000);
+  startBallLoop();
+});
+racketEl.addEventListener('pointermove', ev => { if (racket.held) { racket.tx = ev.pageX - racket.gx; racket.ty = ev.pageY - racket.gy; } });
+function releaseRacket() {
+  if (!racket.held) return;
+  racket.held = false; racket.returning = true; racketEl.style.cursor = 'grab';
+  clearInterval(racket.timer); startBallLoop();
+}
+racketEl.addEventListener('pointerup', releaseRacket);
+racketEl.addEventListener('pointercancel', releaseRacket);
+racketEl.addEventListener('lostpointercapture', releaseRacket);
+
+// Move the racket for this frame: follow the pointer while held, glide home after release. Returns true while it's moving.
+function stepRacket(dt) {
+  racket.px = racket.x; racket.py = racket.y;
+  if (racket.held) { racket.x = racket.tx; racket.y = racket.ty; }
+  else if (racket.returning) {
+    const h = racketHome(), k = 1 - Math.exp(-dt*6);              // smooth ease-out, about a second to settle
+    racket.x += (h.x - racket.x)*k; racket.y += (h.y - racket.y)*k;
+    if (Math.hypot(h.x - racket.x, h.y - racket.y) < 0.4) { racket.x = h.x; racket.y = h.y; racket.returning = false; }
+  }
+  racket.vx = dt ? (racket.x - racket.px)/dt : 0; racket.vy = dt ? (racket.y - racket.py)/dt : 0;
+  if (racket.x !== racket.px || racket.y !== racket.py) showRacket();
+  return racket.held || racket.returning;
+}
+
+// One ball against the racket, with the racket's top-left corner at (rx, ry) and moving at (racket.vx, racket.vy).
+function hitRacket(b, rx, ry) {
+  const lx = b.x - rx, ly = b.y - ry;
+  if (lx < -BALL_R || lx > RK.w + BALL_R || ly < -BALL_R || ly > RK.h + BALL_R) return;
+  let nx, ny, push;
+  const ex = lx - RK.hx, ey = ly - RK.hy, A = RK.ha + BALL_R, B = RK.hb + BALL_R, q = ex*ex/(A*A) + ey*ey/(B*B);
+  const cx = Math.max(RK.x0, Math.min(lx, RK.x1)), dx = lx - cx, dy = ly - RK.hy, dc = Math.hypot(dx, dy), rc = RK.hr + BALL_R;
+  if (q < 1) {                                   // inside the head (grown by the ball's radius): out along the ray from its centre
+    const s = Math.max(Math.sqrt(q), 1e-3), bx = ex/s, by = ey/s;
+    b.x += bx - ex; b.y += by - ey;
+    nx = bx/(A*A); ny = by/(B*B); const n = Math.hypot(nx, ny); nx /= n; ny /= n;   // the ellipse's outward normal there
+  } else if (dc < rc) {                          // the handle or throat
+    if (dc > 1e-6) { nx = dx/dc; ny = dy/dc; } else { nx = 0; ny = ly < RK.hy ? -1 : 1; }
+    b.x += nx*(rc - dc); b.y += ny*(rc - dc);
+  } else return;
+  // Infinitely heavy racket: in the racket's frame the ball just bounces off a still surface; then shift back.
+  const ux = b.vx - racket.vx, uy = b.vy - racket.vy, un = ux*nx + uy*ny;
+  if (un >= 0) return;                           // already leaving the strings
+  const tx = -ny, ty = nx; let ut = ux*tx + uy*ty, un2;
+  if (-un > 40) { un2 = -un*RK.e; ut *= 0.95; b.age = 0; }                     // a real hit: the ball's fade-out clock restarts
+  else { un2 = 0; if (Math.abs(ut) < 2) ut = (Math.random() < 0.5 ? -1 : 1)*40; }  // resting on it: roll off
+  b.vx = un2*nx + ut*tx + racket.vx; b.vy = un2*ny + ut*ty + racket.vy;
 }
 
 // Once the roster has loaded from the Google Sheet (see load()), and on every click on the page background (not on buttons, links or text fields).
 document.addEventListener('click', ev => {
-  if (ev.target.closest('a, button, input, textarea, select, label, summary, dialog, [contenteditable], [role=button]')) return;
+  if (ev.target.closest('a, button, input, textarea, select, label, summary, dialog, [contenteditable], [role=button], #racket')) return;
   launchBalls();
 });
 let ballsDropped = false;   // set once the first live roster has loaded and the opening drop has started
