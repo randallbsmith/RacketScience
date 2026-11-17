@@ -1216,7 +1216,10 @@ function hitRacket(b, rx, ry) {
   const ux = b.vx - racket.vx, uy = b.vy - racket.vy, un = ux*nx + uy*ny;
   if (un >= 0) return;                           // already leaving the strings
   const tx = -ny, ty = nx; let ut = ux*tx + uy*ty, un2;
-  if (-un > 40) { un2 = -un*RK.e; ut *= 0.95; b.age = 0; }                     // a real hit: the ball's fade-out clock restarts
+  if (-un > 40) {                                // a real hit
+    un2 = -un*RK.e; ut *= 0.95;
+    if (racket.held || racket.returning) b.age = 0;                             // a swing restarts the ball's fade-out clock; the racket at rest doesn't
+  }
   else { un2 = 0; if (Math.abs(ut) < 2) ut = (Math.random() < 0.5 ? -1 : 1)*40; }  // resting on it: roll off
   b.vx = un2*nx + ut*tx + racket.vx; b.vy = un2*ny + ut*ty + racket.vy;
 }
