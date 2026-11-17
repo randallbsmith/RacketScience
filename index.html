@@ -351,6 +351,25 @@
 
   .weather[hidden] { display: none; }
 
+  /* Weather panel with a court photo on each side; on narrower screens the photos go side by side below it */
+  .wx-row { display: grid; grid-template-columns: minmax(200px, 330px) minmax(0, 680px) minmax(200px, 330px);
+    justify-content: center; gap: 14px; margin: 0 auto 14px; }
+  .wx-row .weather { margin: 0; grid-column: 2; grid-row: 1; }
+  .court-photo { margin: 0; grid-row: 1; }
+  .court-photo + .weather + .court-photo { grid-column: 3; }
+  .court-photo img { display: block; width: 100%; height: 100%; object-fit: cover;
+    border: 1px solid #cbd9d0; border-radius: 10px; }
+  .wx-row:has(.weather[hidden]) { grid-template-columns: repeat(2, minmax(0, 333px)); }   /* no forecast: photos only */
+  .wx-row:has(.weather[hidden]) .court-photo + .weather + .court-photo { grid-column: 2; }
+  @media (max-width: 1240px) {
+    .wx-row { grid-template-columns: repeat(2, minmax(0, 333px)); }
+    .wx-row .weather { grid-column: 1 / -1; max-width: 680px; }
+    .court-photo { grid-row: 2; }
+    .court-photo + .weather + .court-photo { grid-column: 2; }
+    .wx-row:has(.weather[hidden]) .court-photo { grid-row: 1; }
+    .court-photo img { height: auto; aspect-ratio: 4 / 3; }
+  }
+
   .weather-summary {
     display: flex;
     align-items: center;
@@ -412,6 +431,8 @@
     <p class="current-date" id="current-date"></p>
   </header>
 
+  <div class="wx-row">
+    <figure class="court-photo"><img src="photos/court.jpg" alt="Our court on a sunny autumn morning, with the net, fence, bench and fall colors"></figure>
   <section class="weather" id="weather" hidden aria-label="Weather forecast for the game day">
     <div class="weather-summary" id="weather-summary"></div>
     <div class="weather-charts">
@@ -420,6 +441,8 @@
     </div>
     <div class="credit"></div>
   </section>
+    <figure class="court-photo"><img src="photos/court-2.jpg" alt="Two players warming up on the court in the morning sun"></figure>
+  </div>
 
   <p class="hint">
     <span id="save-status" role="status">Loading roster…</span> <a href="./" id="reload" hidden>Reload to review</a>
