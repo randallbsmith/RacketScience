@@ -1009,7 +1009,7 @@ const TK = (() => {
   return {parts: P.map(([x, y, r]) => ({x: x - cx, y: y - cy, r})), imgX: -cx, imgY: -cy, I1: I/A, ext};
 })();
 const TURKEY_M = 60;         // weight, in tennis balls
-const TURKEY_E = 0.3;        // bounciness: a roast doesn't bounce much
+const TURKEY_E = 0.55;       // bounciness: livelier than a real roast, a bit short of a tennis ball
 const TURKEY_MU = 0.6;       // friction where it touches things
 const turkeyImg = new Image(); turkeyImg.src = 'photos/turkey.png';   // cut out of Randy's picture, background made see-through
 const SPIN_STILL = 3;        // px/s (averaged travel); slower than this counts as stopped. Wedged balls average under 1; slow sliders still roll
