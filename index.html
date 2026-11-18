@@ -994,6 +994,9 @@ const BALL_R = 7.8;          // about 16 px across: still well inside the ~41 px
 const GRAVITY = 1400;        // px/s²
 const RESTITUTION = 0.72;    // fraction of speed kept in a bounce
 const BALL_MAX_AGE = 45;     // s; a ball that comes to rest somewhere fades away after this
+const TURKEY_W = 200;        // px; the Thanksgiving turkey's picture width (about ten times the old drawn one)
+const TURKEY_R = 62;         // px; its bounce circle: a little under half its height, so it sits on things about right
+const turkeyImg = new Image(); turkeyImg.src = 'photos/turkey.png';   // cut out of Randy's picture, background made see-through
 const SPIN_STILL = 3;        // px/s (averaged travel); slower than this counts as stopped. Wedged balls average under 1; slow sliders still roll
 const SPIN_DECAY = 0.85;     // ...and its spin keeps this fraction each frame
 let balls = [], ballsRunning = false, ballsLast = 0;
@@ -1009,15 +1012,17 @@ function launchBalls(n = 15) {
     .filter(r => r.width && r.right > clip.left && r.left < clip.right);
   const topRow = radios.filter(r => radios.length && Math.abs(r.top - radios[0].top) < 2);
   for (let i = 0; i < n; i++) {
-    const vx = (Math.random() < 0.5 ? -1 : 1)*(30 + Math.random()*60), y = -BALL_R;   // always some sideways drift; start just above the page top
-    let x = BALL_R + Math.random()*(W - 2*BALL_R);
+    const turkey = Math.random() < 0.1;          // about 1 in 10 is a roast turkey, for Thanksgiving
+    const r = turkey ? TURKEY_R : BALL_R, m = (r/BALL_R)**2;   // a turkey is far heavier, so it shoves tennis balls aside
+    const vx = (Math.random() < 0.5 ? -1 : 1)*(30 + Math.random()*60), y = -r;   // always some sideways drift; start just above the page top
+    let x = r + Math.random()*(W - 2*r);
     if (topRow.length) {
       const r = topRow[Math.floor(Math.random()*topRow.length)];
       const aim = r.left + scrollX + Math.random()*r.width, fall = r.top + scrollY - y;
       x = aim - vx*Math.sqrt(2*fall/GRAVITY);
     }
-    x = Math.max(BALL_R, Math.min(W - BALL_R, x));
-    balls.push({x, y, vx, vy: 0, spin: Math.random()*6.3, age: 0, turkey: Math.random() < 0.1});   // about 1 in 10 is a roast turkey, for Thanksgiving
+    x = Math.max(r, Math.min(W - r, x));
+    balls.push({x, y, vx, vy: 0, spin: turkey ? 0 : Math.random()*6.3, age: 0, turkey, r, m});
   }
   startBallLoop();
 }
@@ -1041,13 +1046,13 @@ function ballObstacles() {
 
 function bounceBall(b, o) {
   const qx = Math.max(o.l + o.rad, Math.min(b.x, o.r - o.rad)), qy = Math.max(o.t + o.rad, Math.min(b.y, o.b - o.rad));
-  const dx = b.x - qx, dy = b.y - qy, d = Math.hypot(dx, dy), reach = o.rad + BALL_R;
+  const dx = b.x - qx, dy = b.y - qy, d = Math.hypot(dx, dy), reach = o.rad + b.r;
   if (d >= reach) return;
   let nx, ny, pen;
   if (d > 1e-6) { nx = dx/d; ny = dy/d; pen = reach - d; }
   else {                                         // centre got inside: leave by the nearest side
     const sides = [[b.x - o.l, -1, 0], [o.r - b.x, 1, 0], [b.y - o.t, 0, -1], [o.b - b.y, 0, 1]].sort((p, q) => p[0] - q[0]);
-    [pen, nx, ny] = sides[0]; pen += BALL_R;
+    [pen, nx, ny] = sides[0]; pen += b.r;
   }
   b.x += nx*pen; b.y += ny*pen;
   const vn = b.vx*nx + b.vy*ny;
@@ -1058,46 +1063,28 @@ function bounceBall(b, o) {
   b.vx = vn2*nx + vt*tx; b.vy = vn2*ny + vt*ty;
 }
 
-// Two balls of equal weight hitting each other: push them apart, then swap the part of their speed along the
-// line between their centres (less a little, since tennis balls aren't perfectly bouncy).
+// Two balls hitting each other: push them apart, then trade the part of their speed along the line between their
+// centres, by weight (less a little, since tennis balls aren't perfectly bouncy). Two tennis balls just swap it;
+// a turkey barely notices a tennis ball.
 function ballsCollide(a, b) {
-  const dx = b.x - a.x, dy = b.y - a.y, min = 2*BALL_R;
+  const dx = b.x - a.x, dy = b.y - a.y, min = a.r + b.r;
   if (Math.abs(dx) >= min || Math.abs(dy) >= min) return;
   const d2 = dx*dx + dy*dy;
   if (d2 >= min*min || d2 === 0) return;
-  const d = Math.sqrt(d2), nx = dx/d, ny = dy/d, half = (min - d)/2;
-  a.x -= nx*half; a.y -= ny*half; b.x += nx*half; b.y += ny*half;
+  const d = Math.sqrt(d2), nx = dx/d, ny = dy/d, ia = 1/a.m, ib = 1/b.m, sep = (min - d)/(ia + ib);
+  a.x -= nx*sep*ia; a.y -= ny*sep*ia; b.x += nx*sep*ib; b.y += ny*sep*ib;
   const vn = (b.vx - a.vx)*nx + (b.vy - a.vy)*ny;
   if (vn >= 0) return;                           // already separating
-  const jn = -(1 + (-vn > 40 ? RESTITUTION : 0))*vn/2;
-  a.vx -= jn*nx; a.vy -= jn*ny; b.vx += jn*nx; b.vy += jn*ny;
+  const jn = -(1 + (-vn > 40 ? RESTITUTION : 0))*vn/(ia + ib);
+  a.vx -= jn*nx*ia; a.vy -= jn*ny*ia; b.vx += jn*nx*ib; b.vy += jn*ny*ib;
 }
 
-// A roast turkey, the classic way: a plump golden dome with both drumsticks pointing up and out, bones capped with
-// white paper frills. It tumbles with the spin. It bounces exactly like a ball (same size circle); the drawing pokes out a bit.
+// The roast turkey picture, tumbling as it rolls. Upright, its platter of greens rests on the bottom of its bounce circle.
 function drawTurkey(g, x, y, spin, alpha) {
-  const R = BALL_R*1.05;
+  if (!turkeyImg.complete || !turkeyImg.naturalWidth) return;
+  const h = TURKEY_W*turkeyImg.naturalHeight/turkeyImg.naturalWidth;
   g.save(); g.globalAlpha = alpha; g.translate(x, y); g.rotate(spin);
-  const leg = (cx, cy, ang) => {
-    g.save(); g.translate(cx, cy); g.rotate(ang);
-    g.strokeStyle = '#efe3c4'; g.lineWidth = R*0.22; g.lineCap = 'round';          // bone
-    g.beginPath(); g.moveTo(R*0.3, 0); g.lineTo(R*1.0, 0); g.stroke();
-    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(R*1.08, 0, R*0.22, 0, Math.PI*2); g.fill();   // paper frill
-    g.strokeStyle = 'rgba(120,90,60,.35)'; g.lineWidth = 0.6; g.stroke();
-    const lg = g.createLinearGradient(0, -R*0.32, 0, R*0.32); lg.addColorStop(0, '#f0b45c'); lg.addColorStop(1, '#94501b');
-    g.fillStyle = lg; g.beginPath(); g.ellipse(R*0.32, 0, R*0.42, R*0.3, 0, 0, Math.PI*2); g.fill();   // drumstick meat
-    g.restore();
-  };
-  leg(-R*0.42, -R*0.22, -2.25);                  // left drumstick, up and out
-  leg(R*0.42, -R*0.22, -0.89);                   // right drumstick
-  const bg = g.createRadialGradient(-R*0.3, -R*0.35, R*0.1, 0, R*0.1, R*1.15);
-  bg.addColorStop(0, '#f9cd78'); bg.addColorStop(0.5, '#d4862f'); bg.addColorStop(1, '#7a380f');
-  g.fillStyle = bg;
-  g.beginPath(); g.moveTo(-R, R*0.25);           // the body: rounded top, flatter bottom
-  g.bezierCurveTo(-R, -R*0.75, R, -R*0.75, R, R*0.25);
-  g.bezierCurveTo(R, R*0.75, -R, R*0.75, -R, R*0.25); g.fill();
-  g.strokeStyle = 'rgba(255,240,205,.6)'; g.lineWidth = 0.9; g.lineCap = 'round';   // glaze shine
-  g.beginPath(); g.arc(-R*0.1, R*0.2, R*0.5, Math.PI*1.12, Math.PI*1.45); g.stroke();
+  g.drawImage(turkeyImg, -TURKEY_W/2, TURKEY_R - h, TURKEY_W, h);
   g.restore();
 }
 
@@ -1130,11 +1117,11 @@ function tickBalls(now) {
     const f = (s + 1)/steps, rx = racket.px + (racket.x - racket.px)*f, ry = racket.py + (racket.y - racket.py)*f;
     for (const b of balls) {
       b.vy += GRAVITY*h; b.x += b.vx*h; b.y += b.vy*h;
-      for (const o of obs) if (b.x + BALL_R > o.l && b.x - BALL_R < o.r && b.y + BALL_R > o.t && b.y - BALL_R < o.b) bounceBall(b, o);
+      for (const o of obs) if (b.x + b.r > o.l && b.x - b.r < o.r && b.y + b.r > o.t && b.y - b.r < o.b) bounceBall(b, o);
       if (racket.placed) hitRacket(b, rx, ry);
       // The left and right edges of the page are solid walls.
-      if (b.x < BALL_R) { b.x = BALL_R; if (b.vx < 0) b.vx = -b.vx*RESTITUTION; }
-      else if (b.x > pageW - BALL_R) { b.x = pageW - BALL_R; if (b.vx > 0) b.vx = -b.vx*RESTITUTION; }
+      if (b.x < b.r) { b.x = b.r; if (b.vx < 0) b.vx = -b.vx*RESTITUTION; }
+      else if (b.x > pageW - b.r) { b.x = pageW - b.r; if (b.vx > 0) b.vx = -b.vx*RESTITUTION; }
     }
     for (let i = 0; i < balls.length; i++) for (let j = i + 1; j < balls.length; j++) ballsCollide(balls[i], balls[j]);
   }
@@ -1145,15 +1132,16 @@ function tickBalls(now) {
     // Velocity from actual travel, averaged over the last several frames so back-and-forth twitching cancels out.
     const dx = b.x - (b.lx ?? b.x), dy = b.y - (b.ly ?? b.y); b.lx = b.x; b.ly = b.y;
     if (dt) { b.mx = 0.95*(b.mx ?? b.vx) + 0.05*dx/dt; b.my = 0.95*(b.my ?? b.vy) + 0.05*dy/dt; }
-    b.w = Math.hypot(b.mx ?? b.vx, b.my ?? b.vy) < SPIN_STILL ? (b.w ?? 0)*SPIN_DECAY : b.vx/BALL_R;   // moving: rolls without slipping, as before
+    b.w = Math.hypot(b.mx ?? b.vx, b.my ?? b.vy) < SPIN_STILL ? (b.w ?? 0)*SPIN_DECAY : b.vx/b.r;   // moving: rolls without slipping, as before
     b.spin += b.w*dt;
   }
-  balls = balls.filter(b => b.y - BALL_R < pageH && b.age < BALL_MAX_AGE);
+  balls = balls.filter(b => b.y - b.r < pageH && b.age < BALL_MAX_AGE);
   const g = ballCanvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const ox = scrollX + box.left, oy = scrollY + box.top;
   for (const b of balls) {
     const x = b.x - ox, y = b.y - oy;
-    if (x < -3*BALL_R || x > W + 3*BALL_R || y < -3*BALL_R || y > H + 3*BALL_R) continue;
+    const reach = b.turkey ? TURKEY_W*0.75 : 2*BALL_R;
+    if (x < -reach || x > W + reach || y < -reach || y > H + reach) continue;
     (b.turkey ? drawTurkey : drawBall)(g, x, y, b.spin, Math.min(1, (BALL_MAX_AGE - b.age)/2));
   }
   if (balls.length || racketMoving) requestAnimationFrame(tickBalls); else ballsRunning = false;
@@ -1264,10 +1252,10 @@ function stepRacket(dt) {
 // One ball against the racket, with the racket's top-left corner at (rx, ry) and moving at (racket.vx, racket.vy).
 function hitRacket(b, rx, ry) {
   const lx = b.x - rx, ly = b.y - ry;
-  if (lx < -BALL_R || lx > RK.w + BALL_R || ly < -BALL_R || ly > RK.h + BALL_R) return;
+  if (lx < -b.r || lx > RK.w + b.r || ly < -b.r || ly > RK.h + b.r) return;
   let nx, ny, push;
-  const ex = lx - RK.hx, ey = ly - RK.hy, A = RK.ha + BALL_R, B = RK.hb + BALL_R, q = ex*ex/(A*A) + ey*ey/(B*B);
-  const cx = Math.max(RK.x0, Math.min(lx, RK.x1)), dx = lx - cx, dy = ly - RK.hy, dc = Math.hypot(dx, dy), rc = RK.hr + BALL_R;
+  const ex = lx - RK.hx, ey = ly - RK.hy, A = RK.ha + b.r, B = RK.hb + b.r, q = ex*ex/(A*A) + ey*ey/(B*B);
+  const cx = Math.max(RK.x0, Math.min(lx, RK.x1)), dx = lx - cx, dy = ly - RK.hy, dc = Math.hypot(dx, dy), rc = RK.hr + b.r;
   if (q < 1) {                                   // inside the head (grown by the ball's radius): out along the ray from its centre
     const s = Math.max(Math.sqrt(q), 1e-3), bx = ex/s, by = ey/s;
     b.x += bx - ex; b.y += by - ey;
