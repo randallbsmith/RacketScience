@@ -1149,18 +1149,37 @@ function burstTurkey(t) {                        // the picture flies apart in p
     const x = t.x + c*lx - s*ly, y = t.y + s*lx + c*ly, d = Math.hypot(x - t.x, y - t.y) || 1, sp = 250 + Math.random()*500;
     const jag = Array.from({length: 4}, () => 0.75 + Math.random()*0.5);   // ragged edges
     fragments.push({p, x, y, vx: t.vx + (x - t.x)/d*sp + (Math.random() - 0.5)*120, vy: t.vy + (y - t.y)/d*sp - 250 - Math.random()*250,
-                    ang: t.ang, w: (Math.random() - 0.5)*16, age: 0, k, jag});
+                    ang: t.ang, w: (Math.random() - 0.5)*16, age: 0, k, jag, r: Math.max(p.sw, p.sh)*k*0.38});   // r: its bounce circle
   }
 }
-const FRAG_LIFE = 1.6;
-function stepFragments(dt) {
-  for (const f of fragments) { f.vy += GRAVITY*dt; f.x += f.vx*dt; f.y += f.vy*dt; f.ang += f.w*dt; f.age += dt; }
-  fragments = fragments.filter(f => f.age < FRAG_LIFE);
+const FRAG_LIFE = 3;          // s; pieces fade over the last 0.8 s
+// Pieces bounce off the page's buttons and panels and its side edges (not the racket, and not each other), each as
+// a simple circle. They're a little less bouncy than a tennis ball and scuff along surfaces, so they soon settle.
+function stepFragments(dt, obs, pageW, pageH) {
+  for (const f of fragments) {
+    f.age += dt;
+    const steps = Math.max(1, Math.min(60, Math.ceil(Math.hypot(f.vx, f.vy)*dt/(f.r/2)))), h = dt/steps;
+    for (let s = 0; s < steps; s++) {
+      f.vy += GRAVITY*h; f.x += f.vx*h; f.y += f.vy*h;
+      for (const o of obs) {
+        if (f.x + f.r <= o.l || f.x - f.r >= o.r || f.y + f.r <= o.t || f.y - f.r >= o.b) continue;
+        const c = rrContact(f.x, f.y, f.r, o); if (!c) continue;
+        const [nx, ny, pen] = c; f.x += nx*pen; f.y += ny*pen;
+        const vn = f.vx*nx + f.vy*ny; if (vn >= 0) continue;
+        const tx = -ny, ty = nx, vt = (f.vx*tx + f.vy*ty)*0.8, vn2 = -vn > 40 ? -vn*0.55 : 0;
+        f.vx = vn2*nx + vt*tx; f.vy = vn2*ny + vt*ty; f.w = f.w*0.7 + vt/f.r*0.3;   // a scuff turns its spin toward rolling
+      }
+      if (f.x < f.r) { f.x = f.r; if (f.vx < 0) f.vx = -f.vx*0.55; }
+      else if (f.x > pageW - f.r) { f.x = pageW - f.r; if (f.vx > 0) f.vx = -f.vx*0.55; }
+    }
+    f.ang += f.w*dt;
+  }
+  fragments = fragments.filter(f => f.age < FRAG_LIFE && f.y - f.r < pageH);
 }
 function drawFragments(g, ox, oy) {
   for (const f of fragments) {
     const w = f.p.sw*f.k, h = f.p.sh*f.k, j = f.jag;
-    g.save(); g.globalAlpha = Math.min(1, (FRAG_LIFE - f.age)/0.6); g.translate(f.x - ox, f.y - oy); g.rotate(f.ang);
+    g.save(); g.globalAlpha = Math.min(1, (FRAG_LIFE - f.age)/0.8); g.translate(f.x - ox, f.y - oy); g.rotate(f.ang);
     g.beginPath(); g.moveTo(-w/2*j[0], -h/2); g.lineTo(w/2, -h/2*j[1]); g.lineTo(w/2*j[2], h/2); g.lineTo(-w/2, h/2*j[3]); g.closePath(); g.clip();
     g.drawImage(turkeyImg, f.p.sx, f.p.sy, f.p.sw, f.p.sh, -w/2 - 1, -h/2 - 1, w + 2, h + 2);
     g.restore();
@@ -1320,7 +1339,7 @@ function tickBalls(now) {
     turkeyGone(b, !b.burst && b.y - b.r >= pageH);
   }
   balls = balls.filter(b => !b.burst && b.y - b.r < pageH && b.age < BALL_MAX_AGE);
-  stepFragments(dt);
+  stepFragments(dt, obs, pageW, pageH);
   const g = ballCanvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const ox = scrollX + box.left, oy = scrollY + box.top;
   for (const b of balls) {
