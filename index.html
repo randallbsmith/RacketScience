@@ -360,6 +360,15 @@
   .wx-row .weather { margin: 0; grid-column: 2; grid-row: 1; }
   .court-photo { margin: 0; grid-row: 1; }
   .court-photo + .weather + .court-photo { grid-column: 3; }
+  #grab-hint { position: absolute; left: 0; top: 0; z-index: 48; pointer-events: none; user-select: none;
+    color: #1f8f99; font: italic 700 15px system-ui, sans-serif; transition: opacity .4s; }
+  #grab-hint.away { opacity: 0; transition-duration: .15s; }
+  #grab-hint svg { display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #grab-hint span { display: block; margin: -2px 0 0 4px; transform: rotate(-4deg); white-space: nowrap; }
+  #grab-hint .left, #grab-hint.beside .up { display: none; }
+  #grab-hint.beside { display: flex; align-items: center; gap: 2px; }
+  #grab-hint.beside .left { display: block; }
+  #grab-hint.beside span { margin: 0; }
   .bottom.racket-above { margin-top: 56px; }   /* room for the racket's resting spot on narrow screens */
   .court-photo img { display: block; width: 100%; height: 100%; object-fit: cover;
     border: 1px solid #cbd9d0; border-radius: 10px; }
@@ -1169,9 +1178,25 @@ function racketHome() {
                : {x: c2.left + scrollX - RK.w - 16, y: c2.top + scrollY + c2.height/2 - RK.h/2};
 }
 function showRacket() { racketEl.style.transform = `translate(${racket.x}px, ${racket.y}px)`; }
+// "Grab me!" with an arrow up to the resting racket (or, on narrow screens, beside it pointing left). It fades out
+// while the racket is away from home and back in once it has settled.
+const hintEl = document.createElement('div');
+hintEl.id = 'grab-hint'; hintEl.setAttribute('aria-hidden', 'true');
+hintEl.innerHTML = `<svg class="up" width="34" height="30" viewBox="0 0 34 30"><path d="M10 29 C 8 18, 14 9, 22 4" /><path d="M14 4.5 L22 4 L19.5 11.5" /></svg>
+  <svg class="left" width="34" height="22" viewBox="0 0 34 22"><path d="M33 16 C 24 18, 13 15, 5 9" /><path d="M6.5 17 L5 9 L12.5 6.5" /></svg>
+  <span>Grab me!</span>`;
+document.body.append(hintEl);
+function placeHint(h) {
+  const above = document.querySelector('.bottom').classList.contains('racket-above');
+  hintEl.classList.toggle('beside', above);
+  const x = above ? h.x + RK.w + 6 : h.x + RK.w/2 - 24, y = above ? h.y + 10 : h.y + RK.h - 2;
+  hintEl.style.transform = `translate(${x}px, ${y}px)`;
+}
+function showHint(on) { hintEl.classList.toggle('away', !on); }
 function placeRacketHome() {                     // keep the resting racket beside the panel as the layout changes
   if (racket.held || racket.returning) return;
   const h = racketHome(); racket.x = racket.px = h.x; racket.y = racket.py = h.y; racket.placed = true; showRacket();
+  placeHint(h); showHint(true);
 }
 new ResizeObserver(placeRacketHome).observe(document.body);
 window.addEventListener('resize', placeRacketHome);
@@ -1179,7 +1204,7 @@ function startBallLoop() { if (!ballsRunning) { ballsRunning = true; ballsLast =
 racketEl.addEventListener('pointerdown', ev => {
   ev.preventDefault();
   racketEl.setPointerCapture(ev.pointerId);
-  racket.held = true; racket.returning = false; racketEl.style.cursor = 'grabbing';
+  racket.held = true; racket.returning = false; racketEl.style.cursor = 'grabbing'; showHint(false);
   racket.gx = ev.pageX - racket.x; racket.gy = ev.pageY - racket.y; racket.tx = racket.x; racket.ty = racket.y;
   launchBalls(1); clearInterval(racket.timer); racket.timer = setInterval(() => launchBalls(1), 1000);
   startBallLoop();
@@ -1201,7 +1226,7 @@ function stepRacket(dt) {
   else if (racket.returning) {
     const h = racketHome(), k = 1 - Math.exp(-dt*6);              // smooth ease-out, about a second to settle
     racket.x += (h.x - racket.x)*k; racket.y += (h.y - racket.y)*k;
-    if (Math.hypot(h.x - racket.x, h.y - racket.y) < 0.4) { racket.x = h.x; racket.y = h.y; racket.returning = false; }
+    if (Math.hypot(h.x - racket.x, h.y - racket.y) < 0.4) { racket.x = h.x; racket.y = h.y; racket.returning = false; placeHint(h); showHint(true); }
   }
   racket.vx = dt ? (racket.x - racket.px)/dt : 0; racket.vy = dt ? (racket.y - racket.py)/dt : 0;
   if (racket.x !== racket.px || racket.y !== racket.py) showRacket();
