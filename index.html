@@ -993,7 +993,7 @@ document.body.append(ballCanvas);
 const BALL_R = 7.8;          // about 16 px across: still well inside the ~41 px gap between neighbouring Yes/No/Maybe buttons
 const GRAVITY = 1400;        // px/s²
 const RESTITUTION = 0.72;    // fraction of speed kept in a bounce
-const BALL_MAX_AGE = 5;      // s; every ball and turkey fades away after this (fading over the last second); a racket hit restarts the clock
+const BALL_MAX_AGE = 10;     // s; every ball and turkey fades away after this (fading over the last second); a racket hit restarts the clock
 const TURKEY_W = 200;        // px; the Thanksgiving turkey's picture width (about ten times the old drawn one)
 // The turkey is a rigid body: these circles (x, y, radius in px, measured from the picture's centre) trace its outline,
 // including the curved bottom of the platter. They move and turn together, with weight, spin and friction, so it can
@@ -1249,7 +1249,7 @@ function tickBalls(now) {
     b.w = Math.hypot(b.mx ?? b.vx, b.my ?? b.vy) < SPIN_STILL ? (b.w ?? 0)*SPIN_DECAY : b.vx/b.r;   // moving: rolls without slipping, as before
     b.spin += b.w*dt;
   }
-  for (const b of balls) if (b.turkey && b.y - b.r >= pageH) turkeyFellOff(b);
+  for (const b of balls) if (b.turkey && (b.y - b.r >= pageH || b.age >= BALL_MAX_AGE)) turkeyGone(b, b.y - b.r >= pageH);
   balls = balls.filter(b => b.y - b.r < pageH && b.age < BALL_MAX_AGE);
   const g = ballCanvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const ox = scrollX + box.left, oy = scrollY + box.top;
@@ -1348,10 +1348,10 @@ function releaseRacket() {
   racket.held = false; racket.returning = true; racketEl.style.cursor = 'grab';
   clearTimeout(racket.timer); startBallLoop();
 }
-// A turkey that drops off the bottom of the page gobbles. If it was the racket's turkey and the racket is still held
-// four seconds later, another one is served (unless a turkey is already in play by then).
-function turkeyFellOff(t) {
-  playGobble();
+// A turkey that drops off the bottom of the page gobbles. Whether it fell off or faded away, if it was the racket's
+// turkey and the racket is still held four seconds later, another one is served (unless a turkey is already in play by then).
+function turkeyGone(t, fellOff) {
+  if (fellOff) playGobble();
   if (t.fromRacket && racket.held) {
     clearTimeout(racket.timer);
     racket.timer = setTimeout(() => { if (racket.held && !balls.some(b => b.turkey)) { launchBalls(1, true); startBallLoop(); } }, 4000);
