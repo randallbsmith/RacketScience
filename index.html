@@ -993,7 +993,7 @@ document.body.append(ballCanvas);
 const BALL_R = 7.8;          // about 16 px across: still well inside the ~41 px gap between neighbouring Yes/No/Maybe buttons
 const GRAVITY = 1400;        // px/s²
 const RESTITUTION = 0.72;    // fraction of speed kept in a bounce
-const BALL_MAX_AGE = 45;     // s; a ball that comes to rest somewhere fades away after this
+const BALL_MAX_AGE = 5;      // s; every ball and turkey fades away after this (fading over the last second); a racket hit restarts the clock
 const TURKEY_W = 200;        // px; the Thanksgiving turkey's picture width (about ten times the old drawn one)
 // The turkey is a rigid body: these circles (x, y, radius in px, measured from the picture's centre) trace its outline,
 // including the curved bottom of the platter. They move and turn together, with weight, spin and friction, so it can
@@ -1257,7 +1257,7 @@ function tickBalls(now) {
     const x = b.x - ox, y = b.y - oy;
     const reach = b.turkey ? b.r + 10 : 2*BALL_R;
     if (x < -reach || x > W + reach || y < -reach || y > H + reach) continue;
-    (b.turkey ? drawTurkey : drawBall)(g, x, y, b.turkey ? b.ang : b.spin, Math.min(1, (BALL_MAX_AGE - b.age)/2));
+    (b.turkey ? drawTurkey : drawBall)(g, x, y, b.turkey ? b.ang : b.spin, Math.min(1, BALL_MAX_AGE - b.age));
   }
   if (balls.length || racketMoving) requestAnimationFrame(tickBalls); else ballsRunning = false;
 }
@@ -1338,7 +1338,8 @@ racketEl.addEventListener('pointerdown', ev => {
   racket.held = true; racket.returning = false; racketEl.style.cursor = 'grabbing'; showHint(false);
   racket.gx = ev.pageX - racket.x; racket.gy = ev.pageY - racket.y; racket.tx = racket.x; racket.ty = racket.y;
   startAudio();
-  clearTimeout(racket.timer); launchBalls(1, true);   // picking up the racket serves one turkey
+  clearTimeout(racket.timer);
+  if (!balls.some(b => b.turkey)) launchBalls(1, true);   // picking up the racket serves one turkey, unless one is already in play
   startBallLoop();
 });
 racketEl.addEventListener('pointermove', ev => { if (racket.held) { racket.tx = ev.pageX - racket.gx; racket.ty = ev.pageY - racket.gy; } });
@@ -1348,12 +1349,12 @@ function releaseRacket() {
   clearTimeout(racket.timer); startBallLoop();
 }
 // A turkey that drops off the bottom of the page gobbles. If it was the racket's turkey and the racket is still held
-// two seconds later, another one is served.
+// four seconds later, another one is served (unless a turkey is already in play by then).
 function turkeyFellOff(t) {
   playGobble();
   if (t.fromRacket && racket.held) {
     clearTimeout(racket.timer);
-    racket.timer = setTimeout(() => { if (racket.held) { launchBalls(1, true); startBallLoop(); } }, 2000);
+    racket.timer = setTimeout(() => { if (racket.held && !balls.some(b => b.turkey)) { launchBalls(1, true); startBallLoop(); } }, 4000);
   }
 }
 // The gobble: public-domain recording ("Turkey Gobble", SoundBible #1663). Browsers only allow sound after a tap or
