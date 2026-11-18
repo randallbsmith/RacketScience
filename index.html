@@ -1016,7 +1016,7 @@ const SPIN_STILL = 3;        // px/s (averaged travel); slower than this counts 
 const SPIN_DECAY = 0.85;     // ...and its spin keeps this fraction each frame
 let balls = [], ballsRunning = false, ballsLast = 0;
 
-function launchBalls(n = 15) {
+function launchBalls(n = 15, onlyTurkeys = false) {   // onlyTurkeys: the racket's turkey (marked so its fall can be followed)
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const W = document.documentElement.clientWidth;
   // Aim at the Yes/No/Maybe buttons: each ball picks a button in the top row and a spot across it (off-centre, so it
@@ -1027,7 +1027,7 @@ function launchBalls(n = 15) {
     .filter(r => r.width && r.right > clip.left && r.left < clip.right);
   const topRow = radios.filter(r => radios.length && Math.abs(r.top - radios[0].top) < 2);
   for (let i = 0; i < n; i++) {
-    const turkey = Math.random() < 0.1;          // about 1 in 10 is a roast turkey, for Thanksgiving
+    const turkey = onlyTurkeys || Math.random() < 0.1;   // about 1 in 10 is a roast turkey, for Thanksgiving
     const r = turkey ? TK.ext : BALL_R, m = turkey ? TURKEY_M : 1;   // a turkey is far heavier, so it shoves tennis balls aside
     const vx = (Math.random() < 0.5 ? -1 : 1)*(30 + Math.random()*60), y = -r;   // always some sideways drift; start just above the page top
     let x = r + Math.random()*(W - 2*r);
@@ -1037,7 +1037,7 @@ function launchBalls(n = 15) {
       x = aim - vx*Math.sqrt(2*fall/GRAVITY);
     }
     x = Math.max(r, Math.min(W - r, x));
-    balls.push(turkey ? {x, y, vx, vy: 0, ang: 0, w: (Math.random() - 0.5)*0.6, age: 0, turkey, r, m, I: m*TK.I1}
+    balls.push(turkey ? {x, y, vx, vy: 0, ang: 0, w: (Math.random() - 0.5)*0.6, age: 0, turkey, r, m, I: m*TK.I1, fromRacket: onlyTurkeys}
                       : {x, y, vx, vy: 0, spin: Math.random()*6.3, age: 0, r, m});
   }
   startBallLoop();
@@ -1249,6 +1249,7 @@ function tickBalls(now) {
     b.w = Math.hypot(b.mx ?? b.vx, b.my ?? b.vy) < SPIN_STILL ? (b.w ?? 0)*SPIN_DECAY : b.vx/b.r;   // moving: rolls without slipping, as before
     b.spin += b.w*dt;
   }
+  for (const b of balls) if (b.turkey && b.y - b.r >= pageH) turkeyFellOff(b);
   balls = balls.filter(b => b.y - b.r < pageH && b.age < BALL_MAX_AGE);
   const g = ballCanvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const ox = scrollX + box.left, oy = scrollY + box.top;
@@ -1336,14 +1337,43 @@ racketEl.addEventListener('pointerdown', ev => {
   racketEl.setPointerCapture(ev.pointerId);
   racket.held = true; racket.returning = false; racketEl.style.cursor = 'grabbing'; showHint(false);
   racket.gx = ev.pageX - racket.x; racket.gy = ev.pageY - racket.y; racket.tx = racket.x; racket.ty = racket.y;
-  launchBalls(1); clearInterval(racket.timer); racket.timer = setInterval(() => launchBalls(1), 1000);
+  startAudio();
+  clearTimeout(racket.timer); launchBalls(1, true);   // picking up the racket serves one turkey
   startBallLoop();
 });
 racketEl.addEventListener('pointermove', ev => { if (racket.held) { racket.tx = ev.pageX - racket.gx; racket.ty = ev.pageY - racket.gy; } });
 function releaseRacket() {
   if (!racket.held) return;
   racket.held = false; racket.returning = true; racketEl.style.cursor = 'grab';
-  clearInterval(racket.timer); startBallLoop();
+  clearTimeout(racket.timer); startBallLoop();
+}
+// A turkey that drops off the bottom of the page gobbles. If it was the racket's turkey and the racket is still held
+// two seconds later, another one is served.
+function turkeyFellOff(t) {
+  playGobble();
+  if (t.fromRacket && racket.held) {
+    clearTimeout(racket.timer);
+    racket.timer = setTimeout(() => { if (racket.held) { launchBalls(1, true); startBallLoop(); } }, 2000);
+  }
+}
+// The gobble: public-domain recording ("Turkey Gobble", SoundBible #1663). Browsers only allow sound after a tap or
+// click, so it's loaded and unlocked on the first one (grabbing the racket, or clicking the page).
+let audioCtx = null, gobbleBuf = null, gobbleLoading = false;
+function startAudio() {
+  try {
+    audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (!gobbleBuf && !gobbleLoading) {
+      gobbleLoading = true;
+      fetch('sounds/gobble.mp3').then(r => r.ok ? r.arrayBuffer() : Promise.reject())
+        .then(a => audioCtx.decodeAudioData(a)).then(buf => { gobbleBuf = buf; }).catch(() => { gobbleLoading = false; });
+    }
+  } catch {}
+}
+function playGobble() {
+  if (!audioCtx || audioCtx.state !== 'running' || !gobbleBuf) return;
+  const src = audioCtx.createBufferSource(), vol = audioCtx.createGain();
+  src.buffer = gobbleBuf; vol.gain.value = 0.7; src.connect(vol).connect(audioCtx.destination); src.start();
 }
 racketEl.addEventListener('pointerup', releaseRacket);
 racketEl.addEventListener('pointercancel', releaseRacket);
@@ -1401,7 +1431,7 @@ function hitRacket(b, rx, ry) {
 // Once the roster has loaded from the Google Sheet (see load()), and on every click on the page background (not on buttons, links or text fields).
 document.addEventListener('click', ev => {
   if (ev.target.closest('a, button, input, textarea, select, label, summary, dialog, [contenteditable], [role=button], #racket')) return;
-  launchBalls();
+  startAudio(); launchBalls();
 });
 let ballsDropped = false;   // set once the first live roster has loaded and the opening drop has started
 
