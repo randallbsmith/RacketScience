@@ -994,7 +994,7 @@ const BALL_R = 7.8;          // about 16 px across: still well inside the ~41 px
 const GRAVITY = 1400;        // px/s²
 const RESTITUTION = 0.72;    // fraction of speed kept in a bounce
 const BALL_MAX_AGE = 45;     // s; a ball that comes to rest somewhere fades away after this
-const SPIN_STILL = 15;       // px/s; a ball moving slower than this counts as stopped
+const SPIN_STILL = 3;        // px/s (averaged travel); slower than this counts as stopped. Wedged balls average under 1; slow sliders still roll
 const SPIN_DECAY = 0.85;     // ...and its spin keeps this fraction each frame
 let balls = [], ballsRunning = false, ballsLast = 0;
 
@@ -1017,7 +1017,7 @@ function launchBalls(n = 15) {
       x = aim - vx*Math.sqrt(2*fall/GRAVITY);
     }
     x = Math.max(BALL_R, Math.min(W - BALL_R, x));
-    balls.push({x, y, vx, vy: 0, spin: Math.random()*6.3, age: 0});
+    balls.push({x, y, vx, vy: 0, spin: Math.random()*6.3, age: 0, turkey: Math.random() < 0.1});   // about 1 in 10 is a roast turkey, for Thanksgiving
   }
   startBallLoop();
 }
@@ -1073,6 +1073,34 @@ function ballsCollide(a, b) {
   a.vx -= jn*nx; a.vy -= jn*ny; b.vx += jn*nx; b.vy += jn*ny;
 }
 
+// A roast turkey, the classic way: a plump golden dome with both drumsticks pointing up and out, bones capped with
+// white paper frills. It tumbles with the spin. It bounces exactly like a ball (same size circle); the drawing pokes out a bit.
+function drawTurkey(g, x, y, spin, alpha) {
+  const R = BALL_R*1.05;
+  g.save(); g.globalAlpha = alpha; g.translate(x, y); g.rotate(spin);
+  const leg = (cx, cy, ang) => {
+    g.save(); g.translate(cx, cy); g.rotate(ang);
+    g.strokeStyle = '#efe3c4'; g.lineWidth = R*0.22; g.lineCap = 'round';          // bone
+    g.beginPath(); g.moveTo(R*0.3, 0); g.lineTo(R*1.0, 0); g.stroke();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(R*1.08, 0, R*0.22, 0, Math.PI*2); g.fill();   // paper frill
+    g.strokeStyle = 'rgba(120,90,60,.35)'; g.lineWidth = 0.6; g.stroke();
+    const lg = g.createLinearGradient(0, -R*0.32, 0, R*0.32); lg.addColorStop(0, '#f0b45c'); lg.addColorStop(1, '#94501b');
+    g.fillStyle = lg; g.beginPath(); g.ellipse(R*0.32, 0, R*0.42, R*0.3, 0, 0, Math.PI*2); g.fill();   // drumstick meat
+    g.restore();
+  };
+  leg(-R*0.42, -R*0.22, -2.25);                  // left drumstick, up and out
+  leg(R*0.42, -R*0.22, -0.89);                   // right drumstick
+  const bg = g.createRadialGradient(-R*0.3, -R*0.35, R*0.1, 0, R*0.1, R*1.15);
+  bg.addColorStop(0, '#f9cd78'); bg.addColorStop(0.5, '#d4862f'); bg.addColorStop(1, '#7a380f');
+  g.fillStyle = bg;
+  g.beginPath(); g.moveTo(-R, R*0.25);           // the body: rounded top, flatter bottom
+  g.bezierCurveTo(-R, -R*0.75, R, -R*0.75, R, R*0.25);
+  g.bezierCurveTo(R, R*0.75, -R, R*0.75, -R, R*0.25); g.fill();
+  g.strokeStyle = 'rgba(255,240,205,.6)'; g.lineWidth = 0.9; g.lineCap = 'round';   // glaze shine
+  g.beginPath(); g.arc(-R*0.1, R*0.2, R*0.5, Math.PI*1.12, Math.PI*1.45); g.stroke();
+  g.restore();
+}
+
 function drawBall(g, x, y, spin, alpha) {
   g.save(); g.globalAlpha = alpha; g.translate(x, y);
   const grd = g.createRadialGradient(-BALL_R*0.35, -BALL_R*0.4, BALL_R*0.1, 0, 0, BALL_R);
@@ -1125,8 +1153,8 @@ function tickBalls(now) {
   const ox = scrollX + box.left, oy = scrollY + box.top;
   for (const b of balls) {
     const x = b.x - ox, y = b.y - oy;
-    if (x < -BALL_R || x > W + BALL_R || y < -BALL_R || y > H + BALL_R) continue;
-    drawBall(g, x, y, b.spin, Math.min(1, (BALL_MAX_AGE - b.age)/2));
+    if (x < -3*BALL_R || x > W + 3*BALL_R || y < -3*BALL_R || y > H + 3*BALL_R) continue;
+    (b.turkey ? drawTurkey : drawBall)(g, x, y, b.spin, Math.min(1, (BALL_MAX_AGE - b.age)/2));
   }
   if (balls.length || racketMoving) requestAnimationFrame(tickBalls); else ballsRunning = false;
 }
