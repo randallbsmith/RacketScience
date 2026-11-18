@@ -1427,11 +1427,11 @@ function releaseRacket() {
   racket.held = false; racket.returning = true; racketEl.style.cursor = 'grab';
   clearTimeout(racket.timer); startBallLoop();
 }
-// A turkey that drops off the bottom of the page gobbles. Whether it fell off or faded away, if it was the racket's
-// turkey and the racket is still held four seconds later, another one is served (unless a turkey is already in play by then).
+// A turkey that drops off the bottom of the page gobbles. However a turkey goes (falls off, fades or bursts), if the
+// racket is still held four seconds later another one is served, unless a turkey is already in play by then.
 function turkeyGone(t, fellOff) {
   if (fellOff) playGobble();
-  if (t.fromRacket && racket.held) {
+  if (racket.held) {                            // any turkey, not just one the racket served
     clearTimeout(racket.timer);
     racket.timer = setTimeout(() => { if (racket.held && !balls.some(b => b.turkey)) { launchBalls(1, true); startBallLoop(); } }, 4000);
   }
