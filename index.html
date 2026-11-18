@@ -360,6 +360,13 @@
   .wx-row .weather { margin: 0; grid-column: 2; grid-row: 1; }
   .court-photo { margin: 0; grid-row: 1; }
   .court-photo + .weather + .court-photo { grid-column: 3; }
+  #hit-count { position: fixed; left: 50%; top: 50%; z-index: 60; pointer-events: none; user-select: none; opacity: 0;
+    transform: translate(-50%, -50%); font: 900 min(36vw, 220px)/1 system-ui, sans-serif; color: #e08a2c;
+    -webkit-text-stroke: 4px #fff; text-shadow: 0 6px 18px rgba(80,40,0,.35); }
+  #hit-count.pop { animation: hit-pop 1.1s ease-out forwards; }
+  @keyframes hit-pop { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
+                       25% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+                       100% { opacity: 0; transform: translate(-50%, -50%) scale(.9); } }
   #grab-hint { position: absolute; left: 0; top: 0; z-index: 48; pointer-events: none; user-select: none;
     color: #1f8f99; font: italic 700 15px system-ui, sans-serif; transition: opacity .4s; }
   #grab-hint.away { opacity: 0; transition-duration: .15s; }
@@ -1012,6 +1019,19 @@ const TURKEY_M = 60;         // weight, in tennis balls
 const TURKEY_E = 0.55;       // bounciness: livelier than a real roast, a bit short of a tennis ball
 const TURKEY_MU = 0.6;       // friction where it touches things
 const turkeyImg = new Image(); turkeyImg.src = 'photos/turkey.png';   // cut out of Randy's picture, background made see-through
+const TURKEY_HITS = 10;      // racket hits a turkey can take; at zero it bursts
+// For the burst: the picture cut into a grid of pieces, keeping the ones that actually have turkey in them.
+let turkeyPieces = [];
+turkeyImg.addEventListener('load', () => {
+  const w = turkeyImg.naturalWidth, h = turkeyImg.naturalHeight, cols = 7, rows = 5, c = document.createElement('canvas');
+  c.width = w; c.height = h; const g = c.getContext('2d'); g.drawImage(turkeyImg, 0, 0);
+  const px = g.getImageData(0, 0, w, h).data;
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const sx = Math.floor(i*w/cols), sy = Math.floor(j*h/rows), sw = Math.floor((i + 1)*w/cols) - sx, sh = Math.floor((j + 1)*h/rows) - sy;
+    let solid = 0; for (let y = sy; y < sy + sh; y += 2) for (let x = sx; x < sx + sw; x += 2) if (px[(y*w + x)*4 + 3] > 128) solid++;
+    if (solid > sw*sh/4*0.25) turkeyPieces.push({sx, sy, sw, sh});
+  }
+});
 const SPIN_STILL = 3;        // px/s (averaged travel); slower than this counts as stopped. Wedged balls average under 1; slow sliders still roll
 const SPIN_DECAY = 0.85;     // ...and its spin keeps this fraction each frame
 let balls = [], ballsRunning = false, ballsLast = 0;
@@ -1037,7 +1057,7 @@ function launchBalls(n = 15, onlyTurkeys = false) {   // onlyTurkeys: the racket
       x = aim - vx*Math.sqrt(2*fall/GRAVITY);
     }
     x = Math.max(r, Math.min(W - r, x));
-    balls.push(turkey ? {x, y, vx, vy: 0, ang: 0, w: (Math.random() - 0.5)*0.6, age: 0, turkey, r, m, I: m*TK.I1, fromRacket: onlyTurkeys}
+    balls.push(turkey ? {x, y, vx, vy: 0, ang: 0, w: (Math.random() - 0.5)*0.6, age: 0, turkey, r, m, I: m*TK.I1, fromRacket: onlyTurkeys, hits: TURKEY_HITS}
                       : {x, y, vx, vy: 0, spin: Math.random()*6.3, age: 0, r, m});
   }
   startBallLoop();
@@ -1104,6 +1124,47 @@ function drawTurkey(g, x, y, ang, alpha) {
   g.restore();
 }
 
+// ── Turkey hit countdown and burst ──
+// Each held-racket hit on a turkey knocks one off its count, shown big in the middle of the screen. At zero it bursts.
+const hitCountEl = document.createElement('div');
+hitCountEl.id = 'hit-count'; hitCountEl.setAttribute('aria-hidden', 'true');
+document.body.append(hitCountEl);
+function turkeyStruck(t) {
+  const now = performance.now();
+  if (t.burst || now - (t.lastHit || 0) < 250) return;   // one strike can touch several of its circles: count it once
+  t.lastHit = now; t.hits--;
+  hitCountEl.textContent = t.hits;
+  hitCountEl.classList.remove('pop'); void hitCountEl.offsetWidth; hitCountEl.classList.add('pop');   // restart the pop-and-fade
+  if (t.hits <= 0) t.burst = true;
+}
+let fragments = [];
+function burstTurkey(t) {                        // the picture flies apart in pieces, each tumbling away and fading
+  if (!turkeyImg.naturalWidth) return;
+  const k = TURKEY_W/turkeyImg.naturalWidth, h = TURKEY_W*turkeyImg.naturalHeight/turkeyImg.naturalWidth;
+  const c = Math.cos(t.ang), s = Math.sin(t.ang);
+  for (const p of turkeyPieces) {
+    const lx = TK.imgX - TURKEY_W/2 + (p.sx + p.sw/2)*k, ly = TK.imgY - h/2 + (p.sy + p.sh/2)*k;   // piece centre, turkey's own coordinates
+    const x = t.x + c*lx - s*ly, y = t.y + s*lx + c*ly, d = Math.hypot(x - t.x, y - t.y) || 1, sp = 250 + Math.random()*500;
+    const jag = Array.from({length: 4}, () => 0.75 + Math.random()*0.5);   // ragged edges
+    fragments.push({p, x, y, vx: t.vx + (x - t.x)/d*sp + (Math.random() - 0.5)*120, vy: t.vy + (y - t.y)/d*sp - 250 - Math.random()*250,
+                    ang: t.ang, w: (Math.random() - 0.5)*16, age: 0, k, jag});
+  }
+}
+const FRAG_LIFE = 1.6;
+function stepFragments(dt) {
+  for (const f of fragments) { f.vy += GRAVITY*dt; f.x += f.vx*dt; f.y += f.vy*dt; f.ang += f.w*dt; f.age += dt; }
+  fragments = fragments.filter(f => f.age < FRAG_LIFE);
+}
+function drawFragments(g, ox, oy) {
+  for (const f of fragments) {
+    const w = f.p.sw*f.k, h = f.p.sh*f.k, j = f.jag;
+    g.save(); g.globalAlpha = Math.min(1, (FRAG_LIFE - f.age)/0.6); g.translate(f.x - ox, f.y - oy); g.rotate(f.ang);
+    g.beginPath(); g.moveTo(-w/2*j[0], -h/2); g.lineTo(w/2, -h/2*j[1]); g.lineTo(w/2*j[2], h/2); g.lineTo(-w/2, h/2*j[3]); g.closePath(); g.clip();
+    g.drawImage(turkeyImg, f.p.sx, f.p.sy, f.p.sw, f.p.sh, -w/2 - 1, -h/2 - 1, w + 2, h + 2);
+    g.restore();
+  }
+}
+
 // ── Turkey physics (rigid body) ──
 function turkeyParts(t) {                        // its circles in page coordinates
   const c = Math.cos(t.ang), s = Math.sin(t.ang);
@@ -1152,7 +1213,10 @@ function stepTurkey(t, h, obs, pageW, rx, ry) {
     for (const p of turkeyParts(t)) {
       const c = racketContact(p.x - rx, p.y - ry, p.r);
       if (c && turkeyContact(t, c.nx, c.ny, c.pen, p.x - c.nx*p.r, p.y - c.ny*p.r, racket.vx, racket.vy, RK.e) > 40
-          && (racket.held || racket.returning)) t.age = 0;   // a swing restarts its fade-out clock too
+          && (racket.held || racket.returning)) {
+        t.age = 0;                               // a swing restarts its fade-out clock too
+        if (racket.held) turkeyStruck(t);
+      }
     }
   }
   if (t.touch && Math.hypot(t.vx, t.vy) < 14 && Math.abs(t.w) < 0.14) { t.vx *= 0.85; t.vy *= 0.85; t.w *= 0.85; }   // resting on something: settle, no creeping or jitter
@@ -1249,8 +1313,12 @@ function tickBalls(now) {
     b.w = Math.hypot(b.mx ?? b.vx, b.my ?? b.vy) < SPIN_STILL ? (b.w ?? 0)*SPIN_DECAY : b.vx/b.r;   // moving: rolls without slipping, as before
     b.spin += b.w*dt;
   }
-  for (const b of balls) if (b.turkey && (b.y - b.r >= pageH || b.age >= BALL_MAX_AGE)) turkeyGone(b, b.y - b.r >= pageH);
-  balls = balls.filter(b => b.y - b.r < pageH && b.age < BALL_MAX_AGE);
+  for (const b of balls) if (b.turkey && (b.burst || b.y - b.r >= pageH || b.age >= BALL_MAX_AGE)) {
+    if (b.burst) burstTurkey(b);
+    turkeyGone(b, !b.burst && b.y - b.r >= pageH);
+  }
+  balls = balls.filter(b => !b.burst && b.y - b.r < pageH && b.age < BALL_MAX_AGE);
+  stepFragments(dt);
   const g = ballCanvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const ox = scrollX + box.left, oy = scrollY + box.top;
   for (const b of balls) {
@@ -1259,7 +1327,8 @@ function tickBalls(now) {
     if (x < -reach || x > W + reach || y < -reach || y > H + reach) continue;
     (b.turkey ? drawTurkey : drawBall)(g, x, y, b.turkey ? b.ang : b.spin, Math.min(1, BALL_MAX_AGE - b.age));
   }
-  if (balls.length || racketMoving) requestAnimationFrame(tickBalls); else ballsRunning = false;
+  drawFragments(g, ox, oy);
+  if (balls.length || racketMoving || fragments.length) requestAnimationFrame(tickBalls); else ballsRunning = false;
 }
 
 // ── The racket: drag it with the mouse (or a finger) and swat the balls. It sits to the left of the Playing panel, drawn
