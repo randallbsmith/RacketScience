@@ -362,7 +362,9 @@
   .court-photo + .weather + .court-photo { grid-column: 3; }
   #hit-count { position: fixed; left: 50%; top: 50%; z-index: 60; pointer-events: none; user-select: none; opacity: 0;
     transform: translate(-50%, -50%); font: 900 min(36vw, 220px)/1 system-ui, sans-serif; color: #e08a2c;
-    -webkit-text-stroke: 4px #fff; text-shadow: 0 6px 18px rgba(80,40,0,.35); }
+    /* white outline from a ring of shadows: traces only the outer edge (a text stroke also traces the seams inside
+       overlapping glyph pieces, which showed up inside the 2 with the Mac system font) */
+    text-shadow: 4.0px 0.0px 0 #fff, 3.7px 1.5px 0 #fff, 2.8px 2.8px 0 #fff, 1.5px 3.7px 0 #fff, 0.0px 4.0px 0 #fff, -1.5px 3.7px 0 #fff, -2.8px 2.8px 0 #fff, -3.7px 1.5px 0 #fff, -4.0px 0.0px 0 #fff, -3.7px -1.5px 0 #fff, -2.8px -2.8px 0 #fff, -1.5px -3.7px 0 #fff, -0.0px -4.0px 0 #fff, 1.5px -3.7px 0 #fff, 2.8px -2.8px 0 #fff, 3.7px -1.5px 0 #fff, 0 8px 20px rgba(80,40,0,.35); }
   #hit-count.pop { animation: hit-pop 1.1s ease-out forwards; }
   @keyframes hit-pop { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
                        25% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
