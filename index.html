@@ -1152,7 +1152,7 @@ function burstTurkey(t) {                        // the picture flies apart in p
                     ang: t.ang, w: (Math.random() - 0.5)*16, age: 0, k, jag, r: Math.max(p.sw, p.sh)*k*0.38});   // r: its bounce circle
   }
 }
-const FRAG_LIFE = 3;          // s; pieces fade over the last 0.8 s
+const FRAG_LIFE = BALL_MAX_AGE;   // s; pieces last as long as balls and turkeys (10 s), fading over the last 0.8 s
 // Pieces bounce off the page's buttons and panels and its side edges (not the racket, and not each other), each as
 // a simple circle. They're a little less bouncy than a tennis ball and scuff along surfaces, so they soon settle.
 function stepFragments(dt, obs, pageW, pageH) {
