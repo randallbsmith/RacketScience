@@ -985,6 +985,8 @@ const BALL_R = 7.8;          // about 16 px across: still well inside the ~41 px
 const GRAVITY = 1400;        // px/s²
 const RESTITUTION = 0.72;    // fraction of speed kept in a bounce
 const BALL_MAX_AGE = 45;     // s; a ball that comes to rest somewhere fades away after this
+const SPIN_STILL = 15;       // px/s; a ball moving slower than this counts as stopped
+const SPIN_DECAY = 0.85;     // ...and its spin keeps this fraction each frame
 let balls = [], ballsRunning = false, ballsLast = 0;
 
 function launchBalls(n = 15) {
@@ -1099,7 +1101,16 @@ function tickBalls(now) {
     }
     for (let i = 0; i < balls.length; i++) for (let j = i + 1; j < balls.length; j++) ballsCollide(balls[i], balls[j]);
   }
-  for (const b of balls) { b.age += dt; b.spin += b.vx*dt/BALL_R; }
+  // Spin: while a ball is really moving, the seams turn with its sideways travel. Once it's essentially still (wedged
+  // between buttons or other balls, it can twitch without going anywhere), the spin dies away by a fixed fraction each frame.
+  for (const b of balls) {
+    b.age += dt;
+    // Velocity from actual travel, averaged over the last several frames so back-and-forth twitching cancels out.
+    const dx = b.x - (b.lx ?? b.x), dy = b.y - (b.ly ?? b.y); b.lx = b.x; b.ly = b.y;
+    if (dt) { b.mx = 0.95*(b.mx ?? b.vx) + 0.05*dx/dt; b.my = 0.95*(b.my ?? b.vy) + 0.05*dy/dt; }
+    b.w = Math.hypot(b.mx ?? b.vx, b.my ?? b.vy) < SPIN_STILL ? (b.w ?? 0)*SPIN_DECAY : b.vx/BALL_R;   // moving: rolls without slipping, as before
+    b.spin += b.w*dt;
+  }
   balls = balls.filter(b => b.y - BALL_R < pageH && b.age < BALL_MAX_AGE);
   const g = ballCanvas.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
   const ox = scrollX + box.left, oy = scrollY + box.top;
