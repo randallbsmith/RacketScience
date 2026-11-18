@@ -1153,27 +1153,38 @@ function burstTurkey(t) {                        // the picture flies apart in p
   }
 }
 const FRAG_LIFE = BALL_MAX_AGE;   // s; pieces last as long as balls and turkeys (10 s), fading over the last 0.8 s
-// Pieces bounce off the page's buttons and panels and its side edges (not the racket, and not each other), each as
-// a simple circle. They're a little less bouncy than a tennis ball and scuff along surfaces, so they soon settle.
+// Pieces bounce off the page's buttons and panels, its side edges and each other (not the racket), each as a simple
+// circle. They're a little less bouncy than a tennis ball and scuff along surfaces, so they soon settle.
+const FRAG_E = 0.55;
 function stepFragments(dt, obs, pageW, pageH) {
-  for (const f of fragments) {
-    f.age += dt;
-    const steps = Math.max(1, Math.min(60, Math.ceil(Math.hypot(f.vx, f.vy)*dt/(f.r/2)))), h = dt/steps;
-    for (let s = 0; s < steps; s++) {
+  let vmax = 0; for (const f of fragments) { f.age += dt; vmax = Math.max(vmax, Math.hypot(f.vx, f.vy)/f.r); }
+  const steps = Math.max(1, Math.min(60, Math.ceil(vmax*dt*2))), h = dt/steps;   // small enough that no piece moves more than half its size
+  for (let s = 0; s < steps; s++) {
+    for (const f of fragments) {
       f.vy += GRAVITY*h; f.x += f.vx*h; f.y += f.vy*h;
       for (const o of obs) {
         if (f.x + f.r <= o.l || f.x - f.r >= o.r || f.y + f.r <= o.t || f.y - f.r >= o.b) continue;
         const c = rrContact(f.x, f.y, f.r, o); if (!c) continue;
         const [nx, ny, pen] = c; f.x += nx*pen; f.y += ny*pen;
         const vn = f.vx*nx + f.vy*ny; if (vn >= 0) continue;
-        const tx = -ny, ty = nx, vt = (f.vx*tx + f.vy*ty)*0.8, vn2 = -vn > 40 ? -vn*0.55 : 0;
+        const tx = -ny, ty = nx, vt = (f.vx*tx + f.vy*ty)*0.8, vn2 = -vn > 40 ? -vn*FRAG_E : 0;
         f.vx = vn2*nx + vt*tx; f.vy = vn2*ny + vt*ty; f.w = f.w*0.7 + vt/f.r*0.3;   // a scuff turns its spin toward rolling
       }
-      if (f.x < f.r) { f.x = f.r; if (f.vx < 0) f.vx = -f.vx*0.55; }
-      else if (f.x > pageW - f.r) { f.x = pageW - f.r; if (f.vx > 0) f.vx = -f.vx*0.55; }
+      if (f.x < f.r) { f.x = f.r; if (f.vx < 0) f.vx = -f.vx*FRAG_E; }
+      else if (f.x > pageW - f.r) { f.x = pageW - f.r; if (f.vx > 0) f.vx = -f.vx*FRAG_E; }
     }
-    f.ang += f.w*dt;
+    for (let i = 0; i < fragments.length; i++) for (let j = i + 1; j < fragments.length; j++) {   // piece against piece
+      const a = fragments[i], b = fragments[j], dx = b.x - a.x, dy = b.y - a.y, min = a.r + b.r;
+      if (Math.abs(dx) >= min || Math.abs(dy) >= min) continue;
+      const d2 = dx*dx + dy*dy; if (d2 >= min*min || d2 === 0) continue;
+      const d = Math.sqrt(d2), nx = dx/d, ny = dy/d, ma = a.r*a.r, mb = b.r*b.r, sep = (min - d)/(ma + mb);   // weight by size
+      a.x -= nx*sep*mb; a.y -= ny*sep*mb; b.x += nx*sep*ma; b.y += ny*sep*ma;
+      const vn = (b.vx - a.vx)*nx + (b.vy - a.vy)*ny; if (vn >= 0) continue;
+      const jn = -(1 + (-vn > 40 ? FRAG_E : 0))*vn/(1/ma + 1/mb);
+      a.vx -= jn*nx/ma; a.vy -= jn*ny/ma; b.vx += jn*nx/mb; b.vy += jn*ny/mb;
+    }
   }
+  for (const f of fragments) f.ang += f.w*dt;
   fragments = fragments.filter(f => f.age < FRAG_LIFE && f.y - f.r < pageH);
 }
 function drawFragments(g, ox, oy) {
