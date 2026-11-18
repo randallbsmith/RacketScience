@@ -1135,7 +1135,7 @@ const FRAG_LIFE = BALL_MAX_AGE;   // s; pieces last as long as balls and turkeys
 // circle. They're a little less bouncy than a tennis ball and scuff along surfaces, so they soon settle.
 const FRAG_E = 0.55;
 function stepFragments(dt, obs, pageW, pageH) {
-  let vmax = 0; for (const f of fragments) { f.age += dt; vmax = Math.max(vmax, Math.hypot(f.vx, f.vy)/f.r); }
+  let vmax = 0; for (const f of fragments) { if (f.y + f.r > scrollY) f.age += dt; vmax = Math.max(vmax, Math.hypot(f.vx, f.vy)/f.r); }   // no ageing while above the screen
   const steps = Math.max(1, Math.min(60, Math.ceil(vmax*dt*2))), h = dt/steps;   // small enough that no piece moves more than half its size
   for (let s = 0; s < steps; s++) {
     for (const f of fragments) {
@@ -1315,7 +1315,7 @@ function tickBalls(now) {
   // Spin: while a ball is really moving, the seams turn with its sideways travel. Once it's essentially still (wedged
   // between buttons or other balls, it can twitch without going anywhere), the spin dies away by a fixed fraction each frame.
   for (const b of balls) {
-    b.age += dt;
+    if (b.y + b.r > scrollY) b.age += dt;       // the fade-out clock pauses while it's up above the top of the screen, so a big hit can come back down
     if (b.turkey) continue;                      // turkeys turn by their own physics
     // Velocity from actual travel, averaged over the last several frames so back-and-forth twitching cancels out.
     const dx = b.x - (b.lx ?? b.x), dy = b.y - (b.ly ?? b.y); b.lx = b.x; b.ly = b.y;
