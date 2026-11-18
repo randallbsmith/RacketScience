@@ -1189,7 +1189,7 @@ document.body.append(hintEl);
 function placeHint(h) {
   const above = document.querySelector('.bottom').classList.contains('racket-above');
   hintEl.classList.toggle('beside', above);
-  const x = above ? h.x + RK.w + 6 : h.x + RK.w/2 - 24, y = above ? h.y + 10 : h.y + RK.h - 2;
+  const x = above ? h.x + RK.w + 6 : h.x + RK.w/2 - 24, y = above ? h.y + RK.hy - 9 : h.y + RK.h - 2;   // beside: arrow tip level with the racket's centre line
   hintEl.style.transform = `translate(${x}px, ${y}px)`;
 }
 function showHint(on) { hintEl.classList.toggle('away', !on); }
