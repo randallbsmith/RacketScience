@@ -848,7 +848,9 @@ function richBox(value, label) {
   return el;
 }
 
-// One small floating toolbar serves whichever box has the cursor.
+// One small floating toolbar serves whichever box has a selection. Like the phone's own text menu, it appears only
+// while some text is selected, right by the selection: above it with a mouse, below it on touch screens (where
+// the phone's menu takes the space above).
 const fmtBar = document.createElement('div');
 fmtBar.id = 'fmt-bar'; fmtBar.hidden = true; fmtBar.setAttribute('role', 'toolbar'); fmtBar.setAttribute('aria-label', 'Text formatting');
 fmtBar.innerHTML = `<button type="button" data-cmd="bold" title="Bold (⌘B)" aria-pressed="false"><b>B</b></button>`
@@ -856,16 +858,22 @@ fmtBar.innerHTML = `<button type="button" data-cmd="bold" title="Bold (⌘B)" ar
   + `<button type="button" data-cmd="underline" title="Underline (⌘U)" aria-pressed="false"><u>U</u></button>`
   + `<label class="fmt-color" title="Text color">A<i></i><input type="color" value="#d32f2f" aria-label="Text color"></label>`;
 document.body.append(fmtBar);
-const fmtColor = fmtBar.querySelector('input[type=color]');
-fmtBar.querySelector('.fmt-color').style.color = fmtColor.value;
+const fmtColor = fmtBar.querySelector('input[type=color]'), fmtColorBtn = fmtBar.querySelector('.fmt-color');
+fmtColorBtn.style.color = fmtColor.value;
+const touchUI = matchMedia('(pointer: coarse)').matches;
 let fmtTarget = null, fmtRange = null;
 try { document.execCommand('styleWithCSS', false, false); } catch {}
 
+const richOf = node => (node && (node.nodeType === 1 ? node : node.parentElement))?.closest('.rich[contenteditable=true]') || null;
 function placeFmtBar() {
-  if (!fmtTarget || !fmtTarget.isConnected) { fmtBar.hidden = true; return; }
-  const r = fmtTarget.getBoundingClientRect(), h = fmtBar.offsetHeight || 38, w = fmtBar.offsetWidth || 140;
-  fmtBar.style.top = (r.top + scrollY - h - 4) + 'px';
-  fmtBar.style.left = Math.max(scrollX + 4, Math.min(r.left + scrollX, scrollX + document.documentElement.clientWidth - w - 4)) + 'px';
+  if (fmtBar.hidden) return;
+  if (!fmtRange || !fmtTarget?.isConnected) { fmtBar.hidden = true; return; }
+  const r = fmtRange.getBoundingClientRect(), h = fmtBar.offsetHeight, w = fmtBar.offsetWidth;
+  const vw = document.documentElement.clientWidth, vh = innerHeight;
+  let top = touchUI ? r.bottom + 16 : r.top - h - 8;                       // touch: clear of the selection handles
+  if (touchUI ? top + h > vh - 4 : top < 4) top = touchUI ? r.top - h - 8 : r.bottom + 8;
+  const left = Math.max(4, Math.min(r.left + r.width/2 - w/2, vw - w - 4));
+  fmtBar.style.top = (top + scrollY) + 'px'; fmtBar.style.left = (left + scrollX) + 'px';
 }
 function fmtState() {
   for (const b of fmtBar.querySelectorAll('button[data-cmd]')) {
@@ -873,42 +881,52 @@ function fmtState() {
     b.setAttribute('aria-pressed', on);
   }
 }
-function saveFmtRange() {
-  const sel = getSelection();
-  if (fmtTarget && sel.rangeCount && fmtTarget.contains(sel.anchorNode)) fmtRange = sel.getRangeAt(0).cloneRange();
-}
-function restoreFmtRange() {
-  if (!fmtTarget) return false;
-  fmtTarget.focus({preventScroll: true});
-  if (fmtRange) { const sel = getSelection(); sel.removeAllRanges(); sel.addRange(fmtRange); }
-  return true;
-}
-document.addEventListener('focusin', ev => {
-  const el = ev.target.closest?.('.rich[contenteditable=true]');
-  if (el) { fmtTarget = el; fmtBar.hidden = false; placeFmtBar(); fmtState(); }
+// Show or hide the bar whenever the selection changes inside a rich box.
+document.addEventListener('selectionchange', () => {
+  if (fmtBar.contains(document.activeElement)) return;                    // the colour picker is open: leave it be
+  const sel = getSelection(), el = sel.rangeCount ? richOf(sel.anchorNode) : null;
+  if (!el || sel.isCollapsed || !el.contains(sel.focusNode)) { fmtBar.hidden = true; return; }
+  fmtTarget = el; fmtRange = sel.getRangeAt(0).cloneRange();
+  fmtBar.hidden = false; placeFmtBar(); fmtState();
 });
 document.addEventListener('focusout', () => setTimeout(() => {
   const a = document.activeElement;
-  if (!(a && (a === fmtTarget || fmtBar.contains(a)))) { fmtBar.hidden = true; fmtTarget = null; }
+  if (!(a && (a === fmtTarget || fmtBar.contains(a)))) fmtBar.hidden = true;
 }, 0));
-document.addEventListener('selectionchange', () => { if (fmtTarget && document.activeElement === fmtTarget) { saveFmtRange(); fmtState(); } });
 addEventListener('resize', placeFmtBar);
 document.addEventListener('scroll', placeFmtBar, true);
-document.addEventListener('input', ev => { if (ev.target === fmtTarget) placeFmtBar(); });
 
+// B / I / U act the moment the button is pressed, before a tap can disturb the selection. Stopping the press's
+// default keeps the cursor (and on a phone, the keyboard and selection) in the box.
+fmtBar.addEventListener('touchstart', ev => { if (!ev.target.closest('.fmt-color')) ev.preventDefault(); }, {passive: false});
 for (const b of fmtBar.querySelectorAll('button[data-cmd]')) {
-  b.addEventListener('mousedown', ev => ev.preventDefault());          // keep the cursor and selection in the box
-  b.addEventListener('click', () => {
-    if (!restoreFmtRange()) return;
+  const apply = () => {
+    if (!fmtTarget || !fmtRange) return;
+    const sel = getSelection();
+    if (!fmtTarget.contains(sel.anchorNode) || sel.isCollapsed) { fmtTarget.focus({preventScroll: true}); sel.removeAllRanges(); sel.addRange(fmtRange); }
     document.execCommand(b.dataset.cmd);
-    fmtState();
-  });
+    if (sel.rangeCount) fmtRange = sel.getRangeAt(0).cloneRange();
+    fmtState(); placeFmtBar();
+  };
+  b.addEventListener('mousedown', ev => ev.preventDefault());
+  b.addEventListener('pointerdown', ev => { ev.preventDefault(); apply(); });
+  b.addEventListener('click', ev => { if (ev.detail === 0) apply(); });       // keyboard (Enter/Space) presses
 }
-fmtBar.querySelector('.fmt-color').addEventListener('mousedown', saveFmtRange);
+// Colour: the picker takes focus away from the box, so the colour is wrapped around the remembered selection
+// directly rather than through the browser's editing commands.
 fmtColor.addEventListener('change', () => {
-  fmtBar.querySelector('.fmt-color').style.color = fmtColor.value;
-  if (!restoreFmtRange()) return;
-  document.execCommand('foreColor', false, fmtColor.value);
+  fmtColorBtn.style.color = fmtColor.value;
+  if (!fmtTarget?.isConnected || !fmtRange || fmtRange.collapsed) return;
+  const span = document.createElement('span');
+  span.style.color = fmtColor.value;
+  span.append(fmtRange.extractContents());
+  for (const e of span.querySelectorAll('[style], font')) { e.style.color = ''; e.removeAttribute('color'); }   // new colour wins
+  fmtRange.insertNode(span);
+  const r = document.createRange(); r.selectNodeContents(span); fmtRange = r;
+  fmtTarget.dispatchEvent(new Event('input', {bubbles: true}));            // save it like a typed change
+  fmtTarget.focus({preventScroll: true});
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  fmtBar.hidden = false; placeFmtBar();
 });
 // Pasting brings in plain text only; Enter in a player comment is ignored (comments stay one paragraph).
 document.addEventListener('paste', ev => {
