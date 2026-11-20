@@ -849,8 +849,8 @@ function richBox(value, label) {
 }
 
 // One small floating toolbar serves whichever box has a selection. Like the phone's own text menu, it appears only
-// while some text is selected, right by the selection: above it with a mouse, below it on touch screens (where
-// the phone's menu takes the space above).
+// while some text is selected, just above the selection (Safari on iPhone puts its own menu below the selection
+// while typing). On touch screens it sits a little higher, clear of the selection handle.
 const fmtBar = document.createElement('div');
 fmtBar.id = 'fmt-bar'; fmtBar.hidden = true; fmtBar.setAttribute('role', 'toolbar'); fmtBar.setAttribute('aria-label', 'Text formatting');
 fmtBar.innerHTML = `<button type="button" data-cmd="bold" title="Bold (⌘B)" aria-pressed="false"><b>B</b></button>`
@@ -869,9 +869,10 @@ function placeFmtBar() {
   if (fmtBar.hidden) return;
   if (!fmtRange || !fmtTarget?.isConnected) { fmtBar.hidden = true; return; }
   const r = fmtRange.getBoundingClientRect(), h = fmtBar.offsetHeight, w = fmtBar.offsetWidth;
-  const vw = document.documentElement.clientWidth, vh = innerHeight;
-  let top = touchUI ? r.bottom + 16 : r.top - h - 8;                       // touch: clear of the selection handles
-  if (touchUI ? top + h > vh - 4 : top < 4) top = touchUI ? r.top - h - 8 : r.bottom + 8;
+  const vw = document.documentElement.clientWidth;
+  const gap = touchUI ? 18 : 8, vTop = (window.visualViewport?.offsetTop || 0) + 4;
+  let top = r.top - h - gap;
+  if (top < vTop) top = r.bottom + gap;                                     // no room above: go below instead
   const left = Math.max(4, Math.min(r.left + r.width/2 - w/2, vw - w - 4));
   fmtBar.style.top = (top + scrollY) + 'px'; fmtBar.style.left = (left + scrollX) + 'px';
 }
