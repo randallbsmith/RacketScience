@@ -865,16 +865,26 @@ let fmtTarget = null, fmtRange = null;
 try { document.execCommand('styleWithCSS', false, false); } catch {}
 
 const richOf = node => (node && (node.nodeType === 1 ? node : node.parentElement))?.closest('.rich[contenteditable=true]') || null;
+// Where the toolbar goes, worked out in page coordinates: the box's place on the page (from its layout offsets) plus
+// where the selection sits inside the box. That avoids mixing screen-relative numbers, which Safari on iPhone
+// measures differently while the keyboard is up.
+function pagePos(el) {
+  let x = 0, y = 0;
+  for (let e = el; e; e = e.offsetParent) { x += e.offsetLeft; y += e.offsetTop; }
+  for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) { x -= a.scrollLeft; y -= a.scrollTop; }
+  return {x, y};
+}
 function placeFmtBar() {
   if (fmtBar.hidden) return;
   if (!fmtRange || !fmtTarget?.isConnected) { fmtBar.hidden = true; return; }
-  const r = fmtRange.getBoundingClientRect(), h = fmtBar.offsetHeight, w = fmtBar.offsetWidth;
-  const vw = document.documentElement.clientWidth;
-  const gap = touchUI ? 18 : 8, vTop = (window.visualViewport?.offsetTop || 0) + 4;
-  let top = r.top - h - gap;
-  if (top < vTop) top = r.bottom + gap;                                     // no room above: go below instead
-  const left = Math.max(4, Math.min(r.left + r.width/2 - w/2, vw - w - 4));
-  fmtBar.style.top = (top + scrollY) + 'px'; fmtBar.style.left = (left + scrollX) + 'px';
+  const r = fmtRange.getBoundingClientRect(), e = fmtTarget.getBoundingClientRect(), at = pagePos(fmtTarget);
+  const selTop = at.y + (r.top - e.top), selBottom = selTop + r.height, selMid = at.x + (r.left - e.left) + r.width/2;
+  const h = fmtBar.offsetHeight, w = fmtBar.offsetWidth, gap = touchUI ? 18 : 8, vv = window.visualViewport;
+  const viewTop = vv ? vv.pageTop : scrollY, viewLeft = vv ? vv.pageLeft : scrollX, viewW = vv ? vv.width : document.documentElement.clientWidth;
+  let top = selTop - h - gap;
+  if (top < viewTop + 4) top = selBottom + gap;                             // no room above on screen: go below instead
+  fmtBar.style.top = top + 'px';
+  fmtBar.style.left = Math.max(viewLeft + 4, Math.min(selMid - w/2, viewLeft + viewW - w - 4)) + 'px';
 }
 function fmtState() {
   for (const b of fmtBar.querySelectorAll('button[data-cmd]')) {
@@ -895,6 +905,8 @@ document.addEventListener('focusout', () => setTimeout(() => {
   if (!(a && (a === fmtTarget || fmtBar.contains(a)))) fmtBar.hidden = true;
 }, 0));
 addEventListener('resize', placeFmtBar);
+window.visualViewport?.addEventListener('resize', placeFmtBar);
+window.visualViewport?.addEventListener('scroll', placeFmtBar);
 document.addEventListener('scroll', placeFmtBar, true);
 
 // B / I / U act the moment the button is pressed, before a tap can disturb the selection. Stopping the press's
