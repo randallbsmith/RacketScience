@@ -110,6 +110,39 @@
     border-radius: 0;
   }
 
+  /* Rich-text boxes (player comments and team notes): bold, italic, underline and colour */
+  .rich {
+    font: inherit;
+    color: inherit;
+    padding: 8px;
+    border: 1px solid #c3d1c8;
+    background: white;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    line-height: 20px;
+    cursor: text;
+  }
+  td > .rich { min-width: 520px; min-height: 38px; }
+  .rich.notes-edit { min-height: 130px; max-height: 60vh; overflow-y: auto; border-radius: 5px; }
+  .rich:focus { outline: 3px solid #279da8; outline-offset: -3px; }
+  .rich.off { background: #f4f6f5; color: #9aa8a0; cursor: default; }
+
+  #fmt-bar {
+    position: absolute; z-index: 60; display: flex; gap: 2px; align-items: center;
+    padding: 3px; background: #fff; border: 1px solid #9fc7cb; border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  }
+  #fmt-bar[hidden] { display: none; }
+  #fmt-bar button, #fmt-bar label {
+    font: inherit; font-size: 16px; width: 32px; height: 30px; display: grid; place-items: center;
+    border: 0; border-radius: 5px; background: none; color: #243c32; cursor: pointer; padding: 0;
+  }
+  #fmt-bar button:hover, #fmt-bar label:hover { background: #e8f3f4; }
+  #fmt-bar button[aria-pressed=true] { background: #cfe8ea; }
+  #fmt-bar .fmt-color { position: relative; font-weight: 700; }
+  #fmt-bar .fmt-color i { position: absolute; left: 7px; right: 7px; bottom: 4px; height: 4px; border-radius: 2px; background: currentColor; }
+  #fmt-bar input[type=color] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; border: 0; padding: 0; }
+
   input:focus-visible, textarea:focus-visible {
     outline: 3px solid #279da8;
     outline-offset: -3px;
@@ -407,7 +440,7 @@
   #row-guard button { font: inherit; font-weight: 600; padding: 8px 14px; min-width: 84px; border-radius: 8px;
     border: 1px solid #9fc7cb; background: #fff; color: #1d6f77; cursor: pointer; }
   #row-guard button.primary { background: #279da8; border-color: #279da8; color: #fff; }
-  tr.confirming input[type=text] { background: #fff6d6; }
+  tr.confirming input[type=text], tr.confirming .rich { background: #fff6d6; }
   .device-rows button { font: inherit; color: #279da8; background: none; border: 0; padding: 0;
     text-decoration: underline; cursor: pointer; }
 
@@ -469,8 +502,8 @@
     </div>
 
     <div class="notes" id="notes-box">
-      <label for="notes"><b>Team notes</b></label>
-      <textarea id="notes"></textarea>
+      <label id="notes-label"><b>Team notes</b></label>
+      <div id="notes" class="rich notes-edit" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="notes-label"></div>
     </div>
   </section>
 
@@ -762,6 +795,134 @@ function drawWeather(n, savedAt) {
   document.getElementById('weather-rain').innerHTML = rs;
 }
 
+// ── Rich text for player comments and team notes ──
+// What's saved to the sheet: plain text when nothing is formatted (so the sheet stays readable), otherwise a
+// small HTML subset: <b>, <i>, <u> and <span style="color:…">, with line breaks kept as newlines. Anything
+// else that comes back from the sheet is reduced to that subset before it's shown, so no other markup or
+// script can get onto the page.
+const RICH_COLOR = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]{3,20})$/i;
+function richSerialize(root) {
+  let html = '', text = '', fmt = false;
+  const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const newline = () => { if (text && !text.endsWith('\n')) { html += '\n'; text += '\n'; } };
+  (function walk(node) {
+    for (const n of node.childNodes) {
+      if (n.nodeType === 3) { html += esc(n.data); text += n.data; continue; }
+      if (n.nodeType !== 1) continue;
+      const tag = n.tagName.toLowerCase();
+      if (tag === 'br') { html += '\n'; text += '\n'; continue; }
+      if (['script', 'style', 'template', 'iframe', 'object'].includes(tag)) continue;
+      const block = ['div', 'p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote'].includes(tag);
+      if (block) newline();
+      const st = n.style || {}, wraps = [];
+      if (tag === 'b' || tag === 'strong' || st.fontWeight === 'bold' || +st.fontWeight >= 600) wraps.push(['<b>', '</b>']);
+      if (tag === 'i' || tag === 'em' || st.fontStyle === 'italic') wraps.push(['<i>', '</i>']);
+      if (tag === 'u' || /underline/.test(st.textDecorationLine || st.textDecoration || '')) wraps.push(['<u>', '</u>']);
+      let color = ((tag === 'font' && n.getAttribute('color')) || st.color || '').trim();
+      const rgb = color.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/);     // keep it short: rgb(…) → #rrggbb
+      if (rgb) color = '#' + rgb.slice(1).map(v => (+v).toString(16).padStart(2, '0')).join('');
+      if (color && RICH_COLOR.test(color)) wraps.push([`<span style="color:${color}">`, '</span>']);
+      if (wraps.length) fmt = true;
+      for (const [o] of wraps) html += o;
+      walk(n);
+      for (const [, c] of wraps.reverse()) html += c;
+      if (block) newline();
+    }
+  })(root);
+  if (text.endsWith('\n')) { text = text.slice(0, -1); html = html.slice(0, -1); }   // the editor's trailing break
+  return fmt ? html.replace(/<(b|i|u)><\/\1>|<span style="[^"]*"><\/span>/g, '') : text;
+}
+function richParse(value) {     // the sheet's value → a detached DOM tree (scripts in it never run)
+  const t = document.createElement('template'); t.innerHTML = value; return t.content;
+}
+const richHTML = value => {      // a sheet value → safe HTML for an editor
+  const out = richSerialize(richParse(String(value ?? '')));
+  return /<(b|i|u|span)\b/.test(out) ? out : out.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+};
+const richValue = el => richSerialize(el);
+function richBox(value, label) {
+  const el = document.createElement('div');
+  el.className = 'rich'; el.contentEditable = 'true';
+  el.setAttribute('role', 'textbox'); el.setAttribute('aria-label', label);
+  el.innerHTML = richHTML(value);
+  return el;
+}
+
+// One small floating toolbar serves whichever box has the cursor.
+const fmtBar = document.createElement('div');
+fmtBar.id = 'fmt-bar'; fmtBar.hidden = true; fmtBar.setAttribute('role', 'toolbar'); fmtBar.setAttribute('aria-label', 'Text formatting');
+fmtBar.innerHTML = `<button type="button" data-cmd="bold" title="Bold (⌘B)" aria-pressed="false"><b>B</b></button>`
+  + `<button type="button" data-cmd="italic" title="Italic (⌘I)" aria-pressed="false"><i style="font-family:Georgia,serif">I</i></button>`
+  + `<button type="button" data-cmd="underline" title="Underline (⌘U)" aria-pressed="false"><u>U</u></button>`
+  + `<label class="fmt-color" title="Text color">A<i></i><input type="color" value="#d32f2f" aria-label="Text color"></label>`;
+document.body.append(fmtBar);
+const fmtColor = fmtBar.querySelector('input[type=color]');
+fmtBar.querySelector('.fmt-color').style.color = fmtColor.value;
+let fmtTarget = null, fmtRange = null;
+try { document.execCommand('styleWithCSS', false, false); } catch {}
+
+function placeFmtBar() {
+  if (!fmtTarget || !fmtTarget.isConnected) { fmtBar.hidden = true; return; }
+  const r = fmtTarget.getBoundingClientRect(), h = fmtBar.offsetHeight || 38, w = fmtBar.offsetWidth || 140;
+  fmtBar.style.top = (r.top + scrollY - h - 4) + 'px';
+  fmtBar.style.left = Math.max(scrollX + 4, Math.min(r.left + scrollX, scrollX + document.documentElement.clientWidth - w - 4)) + 'px';
+}
+function fmtState() {
+  for (const b of fmtBar.querySelectorAll('button[data-cmd]')) {
+    let on = false; try { on = document.queryCommandState(b.dataset.cmd); } catch {}
+    b.setAttribute('aria-pressed', on);
+  }
+}
+function saveFmtRange() {
+  const sel = getSelection();
+  if (fmtTarget && sel.rangeCount && fmtTarget.contains(sel.anchorNode)) fmtRange = sel.getRangeAt(0).cloneRange();
+}
+function restoreFmtRange() {
+  if (!fmtTarget) return false;
+  fmtTarget.focus({preventScroll: true});
+  if (fmtRange) { const sel = getSelection(); sel.removeAllRanges(); sel.addRange(fmtRange); }
+  return true;
+}
+document.addEventListener('focusin', ev => {
+  const el = ev.target.closest?.('.rich[contenteditable=true]');
+  if (el) { fmtTarget = el; fmtBar.hidden = false; placeFmtBar(); fmtState(); }
+});
+document.addEventListener('focusout', () => setTimeout(() => {
+  const a = document.activeElement;
+  if (!(a && (a === fmtTarget || fmtBar.contains(a)))) { fmtBar.hidden = true; fmtTarget = null; }
+}, 0));
+document.addEventListener('selectionchange', () => { if (fmtTarget && document.activeElement === fmtTarget) { saveFmtRange(); fmtState(); } });
+addEventListener('resize', placeFmtBar);
+document.addEventListener('scroll', placeFmtBar, true);
+document.addEventListener('input', ev => { if (ev.target === fmtTarget) placeFmtBar(); });
+
+for (const b of fmtBar.querySelectorAll('button[data-cmd]')) {
+  b.addEventListener('mousedown', ev => ev.preventDefault());          // keep the cursor and selection in the box
+  b.addEventListener('click', () => {
+    if (!restoreFmtRange()) return;
+    document.execCommand(b.dataset.cmd);
+    fmtState();
+  });
+}
+fmtBar.querySelector('.fmt-color').addEventListener('mousedown', saveFmtRange);
+fmtColor.addEventListener('change', () => {
+  fmtBar.querySelector('.fmt-color').style.color = fmtColor.value;
+  if (!restoreFmtRange()) return;
+  document.execCommand('foreColor', false, fmtColor.value);
+});
+// Pasting brings in plain text only; Enter in a player comment is ignored (comments stay one paragraph).
+document.addEventListener('paste', ev => {
+  const el = ev.target.closest?.('.rich[contenteditable=true]');
+  if (!el) return;
+  ev.preventDefault();
+  let t = ev.clipboardData.getData('text/plain');
+  if (el.id !== 'notes') t = t.replace(/\s*\n\s*/g, ' ');
+  document.execCommand('insertText', false, t);
+});
+document.addEventListener('keydown', ev => {
+  if (ev.key === 'Enter' && ev.target.closest?.('td > .rich')) { ev.preventDefault(); ev.target.blur(); }
+});
+
 function render() {
   edits.clear();
   tbody.replaceChildren();
@@ -769,19 +930,6 @@ function render() {
   document.getElementById('current-date').textContent = label;
   for (const player of state.players) {
     const row = document.createElement('tr');
-    function textField(field,label) {
-      const cell = document.createElement('td'), input = document.createElement('input');
-      input.type='text'; input.value=player[field];
-      input.setAttribute('aria-label',`${label} for ${player.name}`);
-      if(field==='comments') input.style.minWidth='520px';
-      if(['email','alternateEmail'].includes(field)) input.style.minWidth='240px';
-      if(field==='email') input.inputMode='email';
-      if(field==='phone') input.inputMode='tel';
-      const changed = track(player,field);
-      input.addEventListener('input',()=>changed(input.value));
-      input.addEventListener('blur',()=>save(edits.get(`${player.id}:${field}`)));
-      cell.append(input); row.append(cell);
-    }
     const nameCell = document.createElement('td'); nameCell.className = 'player-name'; nameCell.textContent = player.name;   // names aren't editable here
     row.append(nameCell);
     const cell=document.createElement('td'), group=document.createElement('fieldset'), legend=document.createElement('legend');
@@ -812,14 +960,18 @@ function render() {
       label.append(radio,document.createTextNode(choice));group.append(label);
     }
     cell.append(group);row.append(cell);
-    textField('comments','Comments');
+    const ccell = document.createElement('td'), com = richBox(player.comments, `Comments for ${player.name}`);
+    const changeCom = track(player,'comments');
+    com.addEventListener('input',()=>changeCom(richValue(com)));
+    com.addEventListener('blur',()=>save(edits.get(`${player.id}:comments`)));
+    ccell.append(com); row.append(ccell);
     tbody.append(row);
   }
   const notes=document.getElementById('notes');
   document.getElementById('notes-box').hidden = state.notes === null;
-  notes.value=state.notes ?? '';
+  notes.innerHTML=richHTML(state.notes ?? '');
   const changeNotes=track(state,'notes');
-  notes.oninput=()=>changeNotes(notes.value);
+  notes.oninput=()=>changeNotes(richValue(notes));
   notes.onblur=()=>save(edits.get('team:notes'));
   showDeviceRows();updateCount();alignCount();loadWeather(state.gameDate);
 }
@@ -829,7 +981,7 @@ function alignCount() {
   bottom.style.setProperty('--player-width',`${Math.max(0,box.left-bottom.getBoundingClientRect().left)}px`);
   bottom.style.setProperty('--attendance-width',`${box.width}px`);
 }
-const typing=()=>{const a=document.activeElement;return a&&(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&a.type==='text'));};
+const typing=()=>{const a=document.activeElement;return a&&(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&a.type==='text')||a.isContentEditable||!!a.closest('#fmt-bar'));};
 async function load(initial=false) {
   if(stopped || guard.open || dirty() || (!initial && typing()))return;
   try {
@@ -868,8 +1020,8 @@ function renderPlaceholder() {
       label.append(radio, document.createTextNode(choice)); group.append(label);
     }
     att.append(group);
-    const com = document.createElement('td'), ci = document.createElement('input');
-    ci.type = 'text'; ci.disabled = true; ci.style.minWidth = '520px'; com.append(ci);
+    const com = document.createElement('td'), ci = document.createElement('div');
+    ci.className = 'rich off'; com.append(ci);
     row.append(nameCell, att, com); tbody.append(row);
   }
   document.getElementById('count').textContent = '–';
