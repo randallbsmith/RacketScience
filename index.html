@@ -387,21 +387,6 @@
 
   .weather[hidden] { display: none; }
 
-  /* Weather panel with the latest court photo beside it; below it on narrower screens, alone if there's no forecast */
-  .wx-row { display: grid; grid-template-columns: minmax(0, 680px) minmax(240px, 440px); justify-content: center;
-    align-items: start; gap: 14px; margin: 0 auto 14px; }
-  .wx-row .weather { margin: 0; }
-  .wx-row:has(.weather[hidden]) { grid-template-columns: minmax(0, 520px); }
-  .court-now { position: relative; margin: 0; }
-  .court-now img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: cover;
-    border: 1px solid #cbd9d0; border-radius: 10px; }
-  .court-now figcaption { position: absolute; left: 10px; bottom: 10px; padding: 5px 11px; border-radius: 8px;
-    background: rgba(0, 0, 0, .62); color: #fff; font-weight: 700; font-size: 18px; letter-spacing: .2px;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
-  @media (max-width: 1000px) {
-    .wx-row { grid-template-columns: minmax(0, 680px); }
-  }
-
   #hit-count { position: fixed; left: 50%; top: 50%; z-index: 60; pointer-events: none; user-select: none; opacity: 0;
     transform: translate(-50%, -50%); font: 900 min(36vw, 220px)/1 system-ui, sans-serif; color: #e08a2c;
     /* white outline from a ring of shadows: traces only the outer edge (a text stroke also traces the seams inside
@@ -483,7 +468,6 @@
     <p class="current-date" id="current-date"></p>
   </header>
 
-  <div class="wx-row">
   <section class="weather" id="weather" hidden aria-label="Weather forecast for the game day">
     <div class="weather-summary" id="weather-summary"></div>
     <div class="weather-charts">
@@ -492,11 +476,6 @@
     </div>
     <div class="credit"></div>
   </section>
-    <figure class="court-now">
-      <img src="photos/court-conditions.jpg" alt="Our courts this morning: wet and covered in standing water, with leaves and pine needles">
-      <figcaption>Friday 7:45 AM</figcaption>
-    </figure>
-  </div>
 
   <p class="hint">
     <span id="save-status" role="status">Loading roster…</span> <a href="./" id="reload" hidden>Reload to review</a>
