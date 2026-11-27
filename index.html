@@ -1602,7 +1602,8 @@ racketEl.addEventListener('pointerdown', ev => {
   racket.gx = ev.pageX - racket.x; racket.gy = ev.pageY - racket.y; racket.tx = racket.x; racket.ty = racket.y;
   startAudio();
   clearTimeout(racket.timer);
-  if (THANKSGIVING && !balls.some(b => b.turkey)) launchBalls(1, true);   // picking up the racket serves one turkey, unless one is already in play
+  if (!THANKSGIVING) launchBalls(1);                       // picking up the racket serves a tennis ball
+  else if (!balls.some(b => b.turkey)) launchBalls(1, true);  // at Thanksgiving: one turkey, unless one is already in play
   startBallLoop();
 });
 racketEl.addEventListener('pointermove', ev => { if (racket.held) { racket.tx = ev.pageX - racket.gx; racket.ty = ev.pageY - racket.gy; } });
