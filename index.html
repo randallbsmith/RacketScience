@@ -1164,6 +1164,7 @@ const BALL_R = 7.8;          // about 16 px across: still well inside the ~41 px
 const GRAVITY = 1400;        // px/s²
 const RESTITUTION = 0.72;    // fraction of speed kept in a bounce
 const BALL_MAX_AGE = 10;     // s; every ball and turkey fades away after this (fading over the last second); a racket hit restarts the clock
+const THANKSGIVING = false;  // turkeys on/off: when off, no turkeys fall and the racket serves none (turned off after Thanksgiving 2026)
 const TURKEY_W = 200;        // px; the Thanksgiving turkey's picture width (about ten times the old drawn one)
 // The turkey is a rigid body: these circles (x, y, radius in px, measured from the picture's centre) trace its outline,
 // including the curved bottom of the platter. They move and turn together, with weight, spin and friction, so it can
@@ -1181,7 +1182,7 @@ const TK = (() => {
 const TURKEY_M = 60;         // weight, in tennis balls
 const TURKEY_E = 0.55;       // bounciness: livelier than a real roast, a bit short of a tennis ball
 const TURKEY_MU = 0.6;       // friction where it touches things
-const turkeyImg = new Image(); turkeyImg.src = 'photos/turkey.png';   // cut out of Randy's picture, background made see-through
+const turkeyImg = new Image(); if (THANKSGIVING) turkeyImg.src = 'photos/turkey.png';   // cut out of Randy's picture, background made see-through
 const TURKEY_HITS = 10;      // racket hits a turkey can take; at zero it bursts
 // For the burst: the picture cut into a grid of pieces, keeping the ones that actually have turkey in them.
 let turkeyPieces = [];
@@ -1210,7 +1211,7 @@ function launchBalls(n = 15, onlyTurkeys = false) {   // onlyTurkeys: the racket
     .filter(r => r.width && r.right > clip.left && r.left < clip.right);
   const topRow = radios.filter(r => radios.length && Math.abs(r.top - radios[0].top) < 2);
   for (let i = 0; i < n; i++) {
-    const turkey = onlyTurkeys || Math.random() < 0.1;   // about 1 in 10 is a roast turkey, for Thanksgiving
+    const turkey = THANKSGIVING && (onlyTurkeys || Math.random() < 0.1);   // about 1 in 10 is a roast turkey, for Thanksgiving
     const r = turkey ? TK.ext : BALL_R, m = turkey ? TURKEY_M : 1;   // a turkey is far heavier, so it shoves tennis balls aside
     const vx = (Math.random() < 0.5 ? -1 : 1)*(30 + Math.random()*60), y = -r;   // always some sideways drift; start just above the page top
     let x = r + Math.random()*(W - 2*r);
@@ -1601,7 +1602,7 @@ racketEl.addEventListener('pointerdown', ev => {
   racket.gx = ev.pageX - racket.x; racket.gy = ev.pageY - racket.y; racket.tx = racket.x; racket.ty = racket.y;
   startAudio();
   clearTimeout(racket.timer);
-  if (!balls.some(b => b.turkey)) launchBalls(1, true);   // picking up the racket serves one turkey, unless one is already in play
+  if (THANKSGIVING && !balls.some(b => b.turkey)) launchBalls(1, true);   // picking up the racket serves one turkey, unless one is already in play
   startBallLoop();
 });
 racketEl.addEventListener('pointermove', ev => { if (racket.held) { racket.tx = ev.pageX - racket.gx; racket.ty = ev.pageY - racket.gy; } });
@@ -1626,7 +1627,7 @@ function startAudio() {
   try {
     audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    if (!gobbleBuf && !gobbleLoading) {
+    if (THANKSGIVING && !gobbleBuf && !gobbleLoading) {
       gobbleLoading = true;
       fetch('sounds/gobble.mp3').then(r => r.ok ? r.arrayBuffer() : Promise.reject())
         .then(a => audioCtx.decodeAudioData(a)).then(buf => { gobbleBuf = buf; }).catch(() => { gobbleLoading = false; });
